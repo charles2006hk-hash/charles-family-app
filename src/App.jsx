@@ -640,7 +640,7 @@ export default function App() {
                     {dayEvents.filter(e => parseInt(e.startTime) === h).map(ev => {
                        const cat = categories.find(c => c.id === ev.type) || categories[0];
                        return (
-                         <div key={ev.id} onClick={(e) => { e.stopPropagation(); setEditingItem(ev); setShowEventModal(true); }} className={`absolute left-2 right-2 rounded p-2 text-sm border-l-4 shadow-sm z-10 ${cat.color}`}>
+                         <div key={ev.id} onClick={(e) => { e.stopPropagation(); openEventModal(ev); }} className={`absolute left-2 right-2 rounded p-2 text-sm border-l-4 shadow-sm z-10 ${cat.color}`}>
                            <div className="font-bold flex justify-between"><span>{ev.title}</span><span className="opacity-75">{ev.startTime}-{ev.endTime}</span></div>
                          </div>
                        );
@@ -1254,6 +1254,53 @@ export default function App() {
         </div>
       </div>
     );
+  };
+
+  const AddMemberModal = () => {
+      if(!showAddMemberModal) return null;
+      const [name, setName] = useState('');
+      const [role, setRole] = useState('member');
+      const [color, setColor] = useState('bg-gray-100 text-gray-800 border-gray-200');
+
+      return (
+          <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+              <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-sm">
+                  <h3 className="font-bold text-lg mb-4">新增家庭成員</h3>
+                  <div className="space-y-4">
+                      <input className="w-full border p-2 rounded" placeholder="名稱 (例如: 爺爺)" value={name} onChange={e => setName(e.target.value)} />
+                      <select className="w-full border p-2 rounded" value={role} onChange={e => setRole(e.target.value)}>
+                          <option value="member">一般成員</option>
+                          <option value="admin">管理員</option>
+                      </select>
+                      <div className="text-xs text-gray-500">預設密碼為 888888</div>
+                      <div className="flex gap-2 justify-end pt-2">
+                          <button onClick={() => setShowAddMemberModal(false)} className="px-4 py-2 bg-gray-100 rounded">取消</button>
+                          <button onClick={() => handleAddMember({name, role, color})} disabled={!name} className="px-4 py-2 bg-blue-600 text-white rounded font-bold">確認新增</button>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      );
+  };
+
+  const ChangePasswordModal = () => {
+      if(!showChangePasswordModal) return null;
+      const [pwd, setPwd] = useState('');
+
+      return (
+          <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+              <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-sm">
+                  <h3 className="font-bold text-lg mb-4">重設密碼</h3>
+                  <div className="space-y-4">
+                      <input className="w-full border p-2 rounded text-center tracking-widest" placeholder="新密碼" value={pwd} onChange={e => setPwd(e.target.value)} />
+                      <div className="flex gap-2 justify-end pt-2">
+                          <button onClick={() => setShowChangePasswordModal(false)} className="px-4 py-2 bg-gray-100 rounded">取消</button>
+                          <button onClick={() => handleChangePassword(pwd)} disabled={!pwd} className="px-4 py-2 bg-blue-600 text-white rounded font-bold">確認修改</button>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      );
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center">載入中...</div>;
