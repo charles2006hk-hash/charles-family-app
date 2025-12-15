@@ -69,8 +69,7 @@ import {
   Key
 } from 'lucide-react';
 
-// --- 1. Firebase Initialization (Fixed & Hardcoded) ---
-// 修正：直接定義配置，不依賴外部變數，解決白屏問題
+// --- 1. Firebase Initialization (Direct Config) ---
 
 const firebaseConfig = {
   apiKey: "AIzaSyCSX2xjZB7zqKvW9_ao007doKchwTCxGVs",
@@ -82,12 +81,12 @@ const firebaseConfig = {
   measurementId: "G-TW5BCHD6YR"
 };
 
-// Initialize Firebase safely
+// Initialize Firebase
 let app;
 try {
   app = initializeApp(firebaseConfig);
 } catch (e) {
-  // Ignore duplicate initialization
+  // Ignore duplicate app initialization error
 }
 
 const auth = getAuth(app);
@@ -224,11 +223,6 @@ export default function App() {
     script.async = true;
     document.head.appendChild(script);
 
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = 'https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css';
-    document.head.appendChild(link);
-
     const style = document.createElement('style');
     style.innerHTML = `
       body { font-family: system-ui, -apple-system, sans-serif; background: #f3f4f6; }
@@ -253,7 +247,6 @@ export default function App() {
         }
         await signInAnonymously(auth);
       } catch (err) {
-        console.error("Auth Error:", err);
         setAuthError(err.message);
         setLoading(false);
       }
@@ -535,7 +528,50 @@ export default function App() {
                     <div className="text-gray-600">{trip.startDate} 至 {trip.endDate}</div>
                   </div>
                 </div>
-                {/* ... (rest of print content omitted for brevity but assumed present) */}
+                <div className="grid grid-cols-2 gap-8 mb-8">
+                <div className="bg-gray-50 p-6 rounded-lg border">
+                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Info size={20}/> 行程概覽</h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between border-b pb-1"><span>天數</span> <span className="font-bold">{getDaysDiff(trip.startDate, trip.endDate)} 天</span></div>
+                    <div className="flex justify-between border-b pb-1"><span>交通</span> <span className="font-bold">{trip.arrivalType} ({trip.arrivalDetail})</span></div>
+                    <div className="flex justify-between border-b pb-1"><span>當地</span> <span className="font-bold">{trip.localTransport}</span></div>
+                    <div className="flex justify-between border-b pb-1"><span>住宿</span> <span className="font-bold">{trip.hotelStar}星 ({trip.hotelType})</span></div>
+                    <div className="flex justify-between border-b pb-1"><span>人數</span> <span className="font-bold">{trip.participants.length} 人</span></div>
+                    <div className="flex justify-between pt-2">
+                      <span className="flex items-center gap-1"><Weight size={16}/> 預估重量</span> 
+                      <span className="font-bold text-blue-600">{estimate.totalWeight} kg</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-orange-50 p-6 rounded-lg border border-orange-100">
+                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Luggage size={20}/> 共用物品清單</h3>
+                  <ul className="list-disc pl-5 space-y-1">
+                    {trip.packingList?.shared?.map((item, i) => (
+                      <li key={i} className="text-sm">{item.name} <span className="text-gray-400">x{item.qty}</span></li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-6">
+                 {Object.entries(trip.packingList?.individual || {}).map(([uid, items]) => {
+                     const m = members.find(mem => mem.id === uid);
+                     if (!m) return null;
+                     return (
+                       <div key={uid} className="break-inside-avoid">
+                         <div className={`font-bold mb-2 px-2 py-1 rounded ${m.color}`}>{m.name}</div>
+                         <ul className="space-y-1">
+                           {items.map((item, i) => (
+                             <li key={i} className="flex items-center gap-2 text-sm border-b border-dashed border-gray-100 pb-1">
+                               <div className="w-4 h-4 border border-gray-300 rounded-sm"></div>
+                               <span className="flex-1">{item.name}</span>
+                               <span className="text-gray-400 text-xs">x{item.qty}</span>
+                             </li>
+                           ))}
+                         </ul>
+                       </div>
+                     );
+                  })}
+              </div>
             </div>
           </div>
         </div>
@@ -543,8 +579,6 @@ export default function App() {
     );
   };
 
-  // ... (renderCalendarHeader, renderCalendar, renderExpenses, renderSettings from previous code) ...
-  // Re-inserting for completeness
   const renderCalendarHeader = () => (
     <div className="flex items-center justify-between p-4 border-b">
       <div className="flex items-center gap-4">
@@ -937,6 +971,182 @@ export default function App() {
           </div>
       );
   };
+  
+  // --- Modals (Fixed definitions) ---
+  const EventFormModal = () => {
+    if (!showEventModal) return null;
+    const [formData, setFormData] = useState({
+      title: editingItem?.title || '',
+      type: editingItem?.type || 'general',
+      date: editingItem?.date || formatDate(selectedDate),
+      startTime: editingItem?.startTime || '09:00',
+      endTime: editingItem?.endTime || '10:00',
+      participants: editingItem?.participants || members.map(m=>m.id),
+      notes: editingItem?.notes || ''
+    });
+
+    return (
+      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+          <h3 className="text-lg font-bold mb-4">{editingItem?.id ? '修改日程' : '新增日程'}</h3>
+          <div className="space-y-4">
+             <input className="w-full border rounded p-2 font-bold" placeholder="標題" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+             <div>
+               <label className="text-xs text-gray-500 mb-1 block">分類</label>
+               <div className="flex flex-wrap gap-2">
+                 {categories.map(cat => (
+                   <button 
+                     key={cat.id} 
+                     onClick={() => setFormData({...formData, type: cat.id})}
+                     className={`px-3 py-1 text-xs rounded border transition-all ${formData.type === cat.id ? `${cat.color} ring-2 ring-offset-1 ring-gray-300 font-bold` : 'bg-white text-gray-500'}`}
+                   >
+                     {cat.name}
+                   </button>
+                 ))}
+               </div>
+             </div>
+             <div className="flex gap-2">
+               <input type="date" className="w-full border rounded p-2" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
+               <input type="time" className="w-full border rounded p-2" value={formData.startTime} onChange={e => setFormData({...formData, startTime: e.target.value})} />
+             </div>
+             <div>
+               <label className="text-xs text-gray-500 mb-1 block">參與者</label>
+               <div className="flex flex-wrap gap-2">
+                 {members.map(m => (
+                   <button 
+                     key={m.id}
+                     onClick={() => {
+                        const newP = formData.participants.includes(m.id) ? formData.participants.filter(p => p !== m.id) : [...formData.participants, m.id];
+                        setFormData({...formData, participants: newP});
+                     }}
+                     className={`px-2 py-1 rounded text-xs border ${formData.participants.includes(m.id) ? `${m.color} ring-2 ring-offset-1 ring-blue-300` : 'bg-gray-50 border-gray-200 text-gray-500'}`}
+                   >
+                     {m.name.split(' ')[0]}
+                   </button>
+                 ))}
+               </div>
+             </div>
+             <textarea className="w-full border rounded p-2 h-20 text-sm" placeholder="備註..." value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})}></textarea>
+             <div className="flex gap-2 pt-2">
+               {editingItem?.id && <button onClick={() => { deleteItem('events', editingItem.id); setShowEventModal(false); }} className="px-4 py-2 text-red-500 border rounded hover:bg-red-50"><Trash2/></button>}
+               <button onClick={() => setShowEventModal(false)} className="flex-1 px-4 py-2 bg-gray-100 rounded">取消</button>
+               <button onClick={() => saveEvent(formData)} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">儲存</button>
+             </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const TripWizard = () => {
+    if (!showTripWizard) return null;
+    const [step, setStep] = useState(1);
+    const [data, setData] = useState({
+      arrivalType: 'Flight',
+      arrivalDetail: '直飛',
+      localTransport: '公共交通',
+      destination: '', 
+      startDate: formatDate(new Date()), endDate: formatDate(new Date(Date.now() + 5*86400000)), 
+      participants: members.map(m => m.id),
+      hotelStar: 4, hotelType: 'City Hotel'
+    });
+    const createList = () => {
+      const createItem = (name, qty=1) => ({ name, qty, packed: false });
+      const shared = [
+        createItem('Wifi 蛋/SIM卡', 2), createItem('萬能轉插', 2), createItem('急救包', 1), createItem('充電器總座', 1)
+      ];
+      const individualBase = [
+        createItem('護照', 1), createItem('手機', 1), createItem('內衣褲', 5), createItem('襪子', 5), createItem('替換衣物', 5)
+      ];
+      if (data.arrivalDetail === '轉機' || data.arrivalType === 'Train') individualBase.push(createItem('頸枕'));
+      if (data.localTransport === '自駕 (Rental Car)') {
+        shared.push(createItem('國際車牌', 1)); shared.push(createItem('車用手機架', 1)); shared.push(createItem('車充 (USB)', 1)); individualBase.push(createItem('太陽眼鏡'));
+      } else if (data.localTransport === '公共交通') {
+        individualBase.push(createItem('交通卡 (IC Card)')); individualBase.push(createItem('好行的鞋')); individualBase.push(createItem('零錢包'));
+      }
+      if (data.hotelStar < 3) individualBase.push(createItem('洗漱用品'), createItem('毛巾'));
+      if (data.hotelType === 'Resort') individualBase.push(createItem('泳衣'), createItem('太陽眼鏡'));
+      const individual = {};
+      data.participants.forEach(pid => {
+         individual[pid] = [...individualBase];
+         if (pid === 'dad') individual[pid].push(createItem('鬚刨'));
+         if (pid === 'mom' || pid === 'daughter') individual[pid].push(createItem('化妝品'));
+      });
+      return { shared, individual };
+    };
+    const finish = () => {
+      addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'trips'), {
+        ...data, packingList: createList(), createdAt: serverTimestamp()
+      });
+      addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'events'), {
+        title: `✈️ ${data.destination} 之旅`,
+        date: data.startDate,
+        startTime: '00:00', endTime: '23:59',
+        type: 'travel',
+        participants: data.participants,
+        notes: `至 ${data.endDate}。${data.arrivalType}(${data.arrivalDetail}) • 當地:${data.localTransport}`,
+        createdAt: serverTimestamp()
+      });
+      setShowTripWizard(false);
+    };
+    return (
+      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg">
+          <h3 className="font-bold text-lg mb-4">新增旅行計劃</h3>
+          <div className="space-y-4">
+             <div><label className="block text-xs font-bold mb-1">目的地</label><input className="border w-full p-2 rounded mb-2" value={data.destination} onChange={e => setData({...data, destination: e.target.value})} placeholder="例如: 東京"/><div className="flex flex-wrap gap-2">{POPULAR_DESTINATIONS.map(city => (<button key={city} onClick={() => setData({...data, destination: city.split(',')[0]})} className="text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded text-gray-600">{city.split(',')[0]}</button>))}</div></div>
+             <div className="flex gap-4"><div className="flex-1"><label className="block text-xs font-bold mb-1">出發</label><input type="date" className="border w-full p-2 rounded" value={data.startDate} onChange={e => setData({...data, startDate: e.target.value})}/></div><div className="flex-1"><label className="block text-xs font-bold mb-1">回程</label><input type="date" className="border w-full p-2 rounded" value={data.endDate} onChange={e => setData({...data, endDate: e.target.value})}/></div></div>
+             <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold mb-1">往返交通 (Arrival)</label><select className="border w-full p-2 rounded" value={data.arrivalType} onChange={e => setData({...data, arrivalType: e.target.value})}><option value="Flight">飛機 (Flight)</option><option value="Train">高鐵/火車</option><option value="Ship">郵輪</option></select></div><div><label className="block text-xs font-bold mb-1">航班/車次情況</label><select className="border w-full p-2 rounded" value={data.arrivalDetail} onChange={e => setData({...data, arrivalDetail: e.target.value})}><option>直飛/直達</option><option>轉機/轉車</option></select></div></div>
+             <div><label className="block text-xs font-bold mb-1 text-blue-600">當地出行 (Local Transport)</label><select className="border w-full p-2 rounded border-blue-200 bg-blue-50" value={data.localTransport} onChange={e => setData({...data, localTransport: e.target.value})}><option>公共交通</option><option>自駕 (Rental Car)</option><option>包車 (Private Driver)</option><option>的士 (Taxi)</option></select></div>
+             <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold mb-1">酒店星級 (1-5)</label><input type="number" min="1" max="5" className="border w-full p-2 rounded" value={data.hotelStar} onChange={e => setData({...data, hotelStar: parseInt(e.target.value)})}/></div><div><label className="block text-xs font-bold mb-1">住宿類型</label><select className="border w-full p-2 rounded" value={data.hotelType} onChange={e => setData({...data, hotelType: e.target.value})}><option value="City Hotel">城市酒店</option><option value="Resort">度假村</option><option value="Hostel/Airbnb">民宿/青年旅舍</option></select></div></div>
+             <button onClick={finish} className="w-full bg-blue-600 text-white py-3 rounded font-bold mt-4">建立行程與清單</button>
+             <button onClick={() => setShowTripWizard(false)} className="w-full text-gray-500 py-2">取消</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+  
+  const ExpenseFormModal = () => {
+    if (!showExpenseModal) return null;
+    const [formData, setFormData] = useState({
+      name: editingItem?.name || '',
+      amount: editingItem?.amount || '',
+      day: editingItem?.day || 1,
+      month: editingItem?.month || 1, 
+      category: editingItem?.category || '日常',
+      bank: editingItem?.bank || '',
+      type: editingItem?.type || 'recurring_monthly'
+    });
+    const historicalNames = useMemo(() => {
+      const all = [...INITIAL_EXPENSES, ...expenses];
+      return [...new Set(all.map(e => e.name))];
+    }, [expenses]);
+    const handleNameChange = (e) => {
+      const val = e.target.value;
+      setFormData(prev => ({ ...prev, name: val }));
+      const match = [...INITIAL_EXPENSES, ...expenses].find(ex => ex.name === val);
+      if (match) {
+        setFormData(prev => ({ 
+          ...prev, name: val, amount: match.amount || '', category: match.category || '日常', bank: match.bank || '', day: match.day || 1, type: match.type || 'recurring_monthly', month: match.month || 1
+        }));
+      }
+    };
+    return (
+      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+          <h3 className="text-lg font-bold mb-4">{editingItem ? '修改開支' : '新增開支'}</h3>
+          <div className="space-y-3">
+             <div><label className="text-xs text-gray-500">項目名稱</label><input list="expense-names" className="w-full border rounded p-2" value={formData.name} onChange={handleNameChange} placeholder="例如：大埔帝欣苑..."/><datalist id="expense-names">{historicalNames.map((n, i) => <option key={i} value={n}/>)}</datalist></div>
+             <div><label className="text-xs text-gray-500 mb-1 block">頻率</label><div className="flex gap-2"><button onClick={() => setFormData({...formData, type: 'recurring_monthly'})} className={`flex-1 py-2 rounded text-sm border ${formData.type === 'recurring_monthly' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'bg-white text-gray-600'}`}>每月 (Monthly)</button><button onClick={() => setFormData({...formData, type: 'recurring_yearly'})} className={`flex-1 py-2 rounded text-sm border ${formData.type === 'recurring_yearly' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'bg-white text-gray-600'}`}>每年 (Yearly)</button></div></div>
+             <div className="grid grid-cols-2 gap-3"><div><label className="text-xs text-gray-500">金額</label><input type="number" className="w-full border rounded p-2" value={formData.amount} onChange={e => setFormData({...formData, amount: Number(e.target.value)})} /></div>{formData.type === 'recurring_yearly' ? (<div className="flex gap-2"><div className="flex-1"><label className="text-xs text-gray-500">月份</label><input type="number" min="1" max="12" className="w-full border rounded p-2" value={formData.month} onChange={e => setFormData({...formData, month: Number(e.target.value)})} /></div><div className="flex-1"><label className="text-xs text-gray-500">日期</label><input type="number" min="1" max="31" className="w-full border rounded p-2" value={formData.day} onChange={e => setFormData({...formData, day: Number(e.target.value)})} /></div></div>) : (<div><label className="text-xs text-gray-500">每月扣數日</label><input type="number" className="w-full border rounded p-2" value={formData.day} onChange={e => setFormData({...formData, day: Number(e.target.value)})} /></div>)}</div>
+             <div className="grid grid-cols-2 gap-3"><div><label className="text-xs text-gray-500">類別</label><select className="w-full border rounded p-2" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>{['樓宇','信用卡','保險','日常','貸款','其他'].map(c => <option key={c}>{c}</option>)}</select></div><div><label className="text-xs text-gray-500">銀行</label><input className="w-full border rounded p-2" value={formData.bank} onChange={e => setFormData({...formData, bank: e.target.value})} /></div></div>
+             <div className="flex gap-2 pt-4"><button onClick={() => setShowExpenseModal(false)} className="flex-1 px-4 py-2 bg-gray-100 rounded text-gray-600">取消</button><button onClick={() => saveExpense(formData)} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">儲存</button></div>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   if (loading) return <div className="h-screen flex items-center justify-center">載入中...</div>;
   if (authError) return (
@@ -945,6 +1155,7 @@ export default function App() {
         <div className="text-red-500 mb-4 flex justify-center"><AlertCircle size={48} /></div>
         <h2 className="text-xl font-bold text-gray-800 mb-2">無法登入系統</h2>
         <p className="text-sm text-gray-600 mb-4">{authError}</p>
+        <div className="text-xs bg-gray-100 p-4 rounded text-left overflow-x-auto">請檢查 Firebase 設定或網絡連線。</div>
         <button onClick={() => window.location.reload()} className="mt-6 bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">重新整理</button>
       </div>
     </div>
