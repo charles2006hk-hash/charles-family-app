@@ -70,7 +70,6 @@ import {
 } from 'lucide-react';
 
 // --- 1. Firebase Initialization (Direct Config) ---
-
 const firebaseConfig = {
   apiKey: "AIzaSyCSX2xjZB7zqKvW9_ao007doKchwTCxGVs",
   authDomain: "charles-family-app.firebaseapp.com",
@@ -81,7 +80,7 @@ const firebaseConfig = {
   measurementId: "G-TW5BCHD6YR"
 };
 
-// Initialize Firebase
+// Initialize Firebase safely
 let app;
 try {
   app = initializeApp(firebaseConfig);
@@ -159,22 +158,14 @@ const getLunarInfo = (date) => {
   const special = LUNAR_DATA.find(d => d.day === day);
   if (special) return { dayText: special.text, auspicious: special.ausp };
   
-  const lunarDays = ["初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十", 
-                     "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十",
-                     "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"];
+  const lunarDays = ["初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十", "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十", "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"];
   const idx = (day - 1) % 30;
   const randAusp = (day % 5 === 0) ? '宜會友' : (day % 7 === 0 ? '忌遠行' : '');
   return { dayText: lunarDays[idx], auspicious: randAusp };
 };
 
-const isDateInRange = (dateStr, startDateStr, endDateStr) => {
-  return dateStr >= startDateStr && dateStr <= endDateStr;
-};
-
-const getDaysDiff = (start, end) => {
-  const diffTime = Math.abs(new Date(end) - new Date(start));
-  return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; 
-};
+const isDateInRange = (dateStr, startDateStr, endDateStr) => dateStr >= startDateStr && dateStr <= endDateStr;
+const getDaysDiff = (start, end) => Math.ceil(Math.abs(new Date(end) - new Date(start)) / (1000 * 60 * 60 * 24)) + 1;
 
 // --- Main Component ---
 export default function App() {
@@ -203,7 +194,7 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [hoveredEvent, setHoveredEvent] = useState(null); 
   
-  // Modals
+  // Modal States
   const [showEventModal, setShowEventModal] = useState(false);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [showTripWizard, setShowTripWizard] = useState(false);
@@ -211,10 +202,18 @@ export default function App() {
   const [showPrintPreview, setShowPrintPreview] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
 
-  // Admin Modals
+  // Admin Modal States
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [targetMemberId, setTargetMemberId] = useState(null);
+  
+  // Form States
+  const [eventFormData, setEventFormData] = useState({});
+  const [expenseFormData, setExpenseFormData] = useState({});
+  const [tripWizardData, setTripWizardData] = useState({});
+  const [tripStep, setTripStep] = useState(1);
+  const [memberFormData, setMemberFormData] = useState({ name: '', role: 'member', color: '' });
+  const [newPassword, setNewPassword] = useState('');
 
   // --- FORCE STYLE INJECTION ---
   useEffect(() => {
@@ -222,17 +221,8 @@ export default function App() {
     script.src = "https://cdn.tailwindcss.com";
     script.async = true;
     document.head.appendChild(script);
-
     const style = document.createElement('style');
-    style.innerHTML = `
-      body { font-family: system-ui, -apple-system, sans-serif; background: #f3f4f6; }
-      .flex { display: flex; }
-      .flex-col { flex-direction: column; }
-      .h-screen { height: 100vh; }
-      .w-full { width: 100%; }
-      .hidden { display: none; }
-      @media (min-width: 768px) { .md\\:flex { display: flex; } .md\\:hidden { display: none; } }
-    `;
+    style.innerHTML = `body { font-family: system-ui, -apple-system, sans-serif; background: #f3f4f6; } .flex { display: flex; } .hidden { display: none; }`;
     document.head.appendChild(style);
   }, []);
 
@@ -240,60 +230,35 @@ export default function App() {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        try {
-            await setPersistence(auth, browserLocalPersistence);
-        } catch (storageErr) {
-            await setPersistence(auth, inMemoryPersistence);
-        }
+        try { await setPersistence(auth, browserLocalPersistence); } catch (e) { await setPersistence(auth, inMemoryPersistence); }
         await signInAnonymously(auth);
-      } catch (err) {
-        setAuthError(err.message);
-        setLoading(false);
-      }
+      } catch (err) { setAuthError(err.message); setLoading(false); }
     };
     initAuth();
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      if(u) setAuthError(null);
-    });
+    const unsubscribe = onAuthStateChanged(auth, (u) => { setUser(u); if(u) setAuthError(null); });
     return () => unsubscribe();
   }, []);
 
   useEffect(() => {
     if (!user) return;
     
-    // Listen to Members
+    // Listeners
     const unsubMembers = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'members')), (snap) => {
         const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         if (data.length === 0) {
-            DEFAULT_MEMBERS_SEED.forEach(async (m) => {
-                await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'members'), {
-                    ...m, createdAt: serverTimestamp()
-                });
-            });
+            DEFAULT_MEMBERS_SEED.forEach(async (m) => addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'members'), { ...m, createdAt: serverTimestamp() }));
         } else {
             setMembers(data);
         }
         setLoading(false);
     });
-
-    const unsubEvents = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'events')), 
-      (snap) => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-    );
-    
-    const unsubExpenses = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses')), 
-      (snap) => {
+    const unsubEvents = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'events')), (snap) => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubExpenses = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses')), (snap) => {
         const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         setExpenses(data);
-        if (data.length === 0) {
-          INITIAL_EXPENSES.forEach(e => addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses'), { ...e, createdAt: serverTimestamp() }));
-        }
-      }
-    );
-
-    const unsubTrips = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'trips')), 
-      (snap) => setTrips(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-    );
+        if (data.length === 0) INITIAL_EXPENSES.forEach(e => addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses'), { ...e, createdAt: serverTimestamp() }));
+    });
+    const unsubTrips = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'trips')), (snap) => setTrips(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
 
     return () => { unsubMembers(); unsubEvents(); unsubExpenses(); unsubTrips(); };
   }, [user]);
@@ -303,25 +268,18 @@ export default function App() {
     const days = getDaysDiff(trip.startDate, trip.endDate);
     const personCount = trip.participants.length;
     let totalWeight = Math.round(personCount * (3 + (days * 1.2))); 
-    if (trip.hotelStar && trip.hotelStar < 3) totalWeight += personCount * 1; 
+    if (trip.hotelStar < 3) totalWeight += personCount * 1; 
     if (trip.hotelType === 'Resort') totalWeight += personCount * 1; 
     if (trip.destination.includes('日本')) totalWeight += 5; 
-    let advice = "";
-    if (totalWeight < 10) advice = "1個登機箱 (Carry-on)";
-    else if (totalWeight < 25) advice = "1個 24吋行李箱 + 1個背包";
-    else if (totalWeight < 45) advice = "2個 26-28吋行李箱";
-    else advice = `建議 ${Math.ceil(totalWeight/20)}個 大型行李箱`;
+    let advice = totalWeight < 10 ? "1個登機箱" : totalWeight < 25 ? "1個24吋 + 背包" : totalWeight < 45 ? "2個26-28吋" : `建議 ${Math.ceil(totalWeight/20)}個 大型行李箱`;
     return { totalWeight, advice };
   };
 
   const calculatePackingProgress = (list) => {
     if (!list) return 0;
-    let total = 0;
-    let packed = 0;
+    let total = 0, packed = 0;
     (list.shared || []).forEach(i => { total++; if(i.packed) packed++; });
-    Object.values(list.individual || {}).forEach(pItems => {
-      pItems.forEach(i => { total++; if(i.packed) packed++; });
-    });
+    Object.values(list.individual || {}).forEach(pItems => { pItems.forEach(i => { total++; if(i.packed) packed++; }); });
     return total === 0 ? 0 : Math.round((packed / total) * 100);
   };
 
@@ -333,30 +291,126 @@ export default function App() {
           setPasswordInput('');
           setLoginError('');
       } else {
-          setLoginError('密碼錯誤，請重試');
+          setLoginError('密碼錯誤');
       }
   };
 
-  const handleLogout = () => {
-      setCurrentUserRole(null);
-  };
+  const handleLogout = () => { setCurrentUserRole(null); };
 
-  const handleAddMember = async (newMember) => {
-      await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'members'), {
-          ...newMember,
-          password: '888888',
-          createdAt: serverTimestamp()
-      });
+  const handleAddMember = async () => {
+      if(!memberFormData.name) return;
+      await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'members'), { ...memberFormData, password: '888888', createdAt: serverTimestamp() });
       setShowAddMemberModal(false);
+      setMemberFormData({ name: '', role: 'member', color: 'bg-gray-100' });
   };
 
-  const handleChangePassword = async (newPassword) => {
-      if (!targetMemberId) return;
-      await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'members', targetMemberId), {
-          password: newPassword
-      });
+  const handleChangePassword = async () => {
+      if (!targetMemberId || !newPassword) return;
+      await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'members', targetMemberId), { password: newPassword });
       setShowChangePasswordModal(false);
       setTargetMemberId(null);
+      setNewPassword('');
+  };
+
+  const saveEvent = async () => {
+    const payload = { ...eventFormData, updatedAt: serverTimestamp() };
+    if (editingItem?.id) await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'events', editingItem.id), payload);
+    else await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'events'), { ...payload, createdAt: serverTimestamp() });
+    setShowEventModal(false);
+    setEditingItem(null);
+  };
+
+  const saveExpense = async () => {
+    if (editingItem?.id) await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'expenses', editingItem.id), expenseFormData);
+    else await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses'), { ...expenseFormData, createdAt: serverTimestamp() });
+    setShowExpenseModal(false);
+    setEditingItem(null);
+  };
+
+  const finishTripWizard = () => {
+      const createItem = (name, qty=1) => ({ name, qty, packed: false });
+      const shared = [createItem('Wifi 蛋/SIM卡', 2), createItem('萬能轉插', 2), createItem('急救包', 1), createItem('充電器總座', 1)];
+      const individualBase = [createItem('護照', 1), createItem('手機', 1), createItem('內衣褲', 5), createItem('襪子', 5), createItem('替換衣物', 5)];
+      
+      if (tripWizardData.arrivalDetail === '轉機' || tripWizardData.arrivalType === 'Train') individualBase.push(createItem('頸枕'));
+      if (tripWizardData.localTransport === '自駕 (Rental Car)') { shared.push(createItem('國際車牌')); shared.push(createItem('車用手機架')); }
+      else if (tripWizardData.localTransport === '公共交通') { individualBase.push(createItem('交通卡')); individualBase.push(createItem('好行的鞋')); }
+      if (tripWizardData.hotelStar < 3) individualBase.push(createItem('洗漱用品'), createItem('毛巾'));
+      if (tripWizardData.hotelType === 'Resort') individualBase.push(createItem('泳衣'), createItem('太陽眼鏡'));
+
+      const individual = {};
+      tripWizardData.participants.forEach(pid => {
+         individual[pid] = [...individualBase];
+         if (pid === 'dad') individual[pid].push(createItem('鬚刨'));
+         if (pid === 'mom' || pid === 'daughter') individual[pid].push(createItem('化妝品'));
+      });
+
+      addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'trips'), { ...tripWizardData, packingList: { shared, individual }, createdAt: serverTimestamp() });
+      addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'events'), { title: `✈️ ${tripWizardData.destination} 之旅`, date: tripWizardData.startDate, startTime: '00:00', endTime: '23:59', type: 'travel', participants: tripWizardData.participants, notes: `至 ${tripWizardData.endDate}`, createdAt: serverTimestamp() });
+      setShowTripWizard(false);
+  };
+
+  const togglePackedItem = async (trip, category, index, uid = null) => {
+    const newList = JSON.parse(JSON.stringify(trip.packingList));
+    if (category === 'shared') newList.shared[index].packed = !newList.shared[index].packed;
+    else if (uid) newList.individual[uid][index].packed = !newList.individual[uid][index].packed;
+    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'trips', trip.id), { packingList: newList });
+  };
+
+  const handleToggleExpensePaid = async (expenseId) => {
+    const currentMonthKey = `paid_${new Date().getFullYear()}_${new Date().getMonth()}`;
+    const expense = expenses.find(e => e.id === expenseId);
+    const paidMonths = expense.paidMonths || [];
+    const newPaidMonths = paidMonths.includes(currentMonthKey) ? paidMonths.filter(m => m !== currentMonthKey) : [...paidMonths, currentMonthKey];
+    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'expenses', expenseId), { paidMonths: newPaidMonths });
+  };
+
+  const deleteItem = async (collectionName, id) => {
+    if (confirm('確定刪除?')) {
+      await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, collectionName, id));
+      if (collectionName === 'trips') setShowTripEditModal(false);
+      if (collectionName === 'events') setShowEventModal(false);
+      if (collectionName === 'expenses') setShowExpenseModal(false);
+    }
+  };
+
+  // --- Initializing Forms ---
+  const openEventModal = (item) => {
+      setEditingItem(item);
+      setEventFormData({
+          title: item?.title || '',
+          type: item?.type || 'general',
+          date: item?.date || formatDate(selectedDate),
+          startTime: item?.startTime || '09:00',
+          endTime: item?.endTime || '10:00',
+          participants: item?.participants || members.map(m=>m.id),
+          notes: item?.notes || ''
+      });
+      setShowEventModal(true);
+  };
+
+  const openExpenseModal = (item) => {
+      setEditingItem(item);
+      setExpenseFormData({
+          name: item?.name || '',
+          amount: item?.amount || '',
+          day: item?.day || 1,
+          month: item?.month || 1,
+          category: item?.category || '日常',
+          bank: item?.bank || '',
+          type: item?.type || 'recurring_monthly'
+      });
+      setShowExpenseModal(true);
+  };
+
+  const openTripWizard = () => {
+      setTripStep(1);
+      setTripWizardData({
+          arrivalType: 'Flight', arrivalDetail: '直飛', localTransport: '公共交通',
+          destination: '', startDate: formatDate(new Date()), endDate: formatDate(new Date(Date.now() + 5*86400000)),
+          participants: members.map(m => m.id), hotelStar: 4, hotelType: 'City Hotel'
+      });
+      setShowTripWizard(true);
   };
 
   const handleUpdateCategory = (newCat) => {
@@ -367,135 +421,37 @@ export default function App() {
     }
   };
 
-  const saveEvent = async (data) => {
-    const payload = { ...data, updatedAt: serverTimestamp() };
-    if (editingItem?.id) {
-      await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'events', editingItem.id), payload);
-    } else {
-      await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'events'), { ...payload, createdAt: serverTimestamp() });
-    }
-    setShowEventModal(false);
-    setEditingItem(null);
-  };
-
-  const saveTripList = async (tripId, newList) => {
-     await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'trips', tripId), { packingList: newList });
-  };
-
-  const saveExpense = async (data) => {
-    if (editingItem?.id) {
-      await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'expenses', editingItem.id), data);
-    } else {
-      await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses'), { ...data, createdAt: serverTimestamp() });
-    }
-    setShowExpenseModal(false);
-    setEditingItem(null);
-  };
-
-  const togglePackedItem = async (trip, category, index, uid = null) => {
-    const newList = JSON.parse(JSON.stringify(trip.packingList));
-    if (category === 'shared') {
-      newList.shared[index].packed = !newList.shared[index].packed;
-    } else if (uid) {
-      newList.individual[uid][index].packed = !newList.individual[uid][index].packed;
-    }
-    await saveTripList(trip.id, newList);
-  };
-
-  const handleToggleExpensePaid = async (expenseId) => {
-    const currentMonth = new Date().getMonth();
-    const paidKey = `paid_${new Date().getFullYear()}_${currentMonth}`;
-    const expense = expenses.find(e => e.id === expenseId);
-    const paidMonths = expense.paidMonths || [];
-    const newPaidMonths = paidMonths.includes(paidKey) 
-      ? paidMonths.filter(m => m !== paidKey) 
-      : [...paidMonths, paidKey];
-    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'expenses', expenseId), { paidMonths: newPaidMonths });
-  };
-
-  const deleteItem = async (collectionName, id) => {
-    if (confirm('確定刪除?')) {
-      await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, collectionName, id));
-      if (collectionName === 'trips') setShowTripEditModal(false);
-    }
-  };
-
-  // --- Sub-Components ---
-  const Tooltip = () => {
-    if (!hoveredEvent) return null;
-    const { event, x, y } = hoveredEvent;
-    const cat = categories.find(c => c.id === event.type) || categories[0];
-    const style = { top: y + 20, left: Math.min(x, window.innerWidth - 250), zIndex: 100 };
-    return (
-      <div className="fixed bg-white p-3 rounded-lg shadow-xl border border-gray-200 w-64 pointer-events-none" style={style}>
-        <div className={`text-xs font-bold px-2 py-0.5 rounded w-fit mb-1 ${cat.color}`}>{cat.name}</div>
-        <div className="font-bold text-gray-800">{event.title}</div>
-        <div className="text-xs text-gray-500 mt-1 flex items-center gap-1"><Clock size={12}/> {event.startTime} - {event.endTime}</div>
-        {event.notes && <div className="text-xs text-gray-600 mt-2 bg-gray-50 p-2 rounded">{event.notes}</div>}
-        <div className="flex gap-1 mt-2">
-          {event.participants?.map(pid => {
-            const m = members.find(mem => mem.id === pid);
-            return m ? <div key={pid} className="w-5 h-5 rounded-full text-[8px] flex items-center justify-center bg-gray-200">{m.name[0]}</div> : null;
-          })}
-        </div>
-      </div>
-    );
-  };
-
-  // --- RENDER FUNCTIONS ---
+  // --- Render Functions (To prevent focus loss) ---
 
   const renderLoginScreen = () => {
       if (loginTargetMember) {
           return (
               <div className="h-screen flex items-center justify-center bg-gray-100 p-4">
                   <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-sm text-center">
-                      <div className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center text-3xl font-bold mb-4 ${loginTargetMember.color}`}>
-                          {loginTargetMember.name[0]}
-                      </div>
+                      <div className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center text-3xl font-bold mb-4 ${loginTargetMember.color}`}>{loginTargetMember.name[0]}</div>
                       <h2 className="text-2xl font-bold mb-6">歡迎, {loginTargetMember.name.split(' ')[0]}</h2>
-                      
-                      <div className="mb-4">
-                          <input 
-                              type="password" 
-                              className="w-full text-center border-2 border-gray-300 rounded-lg p-3 text-lg tracking-widest focus:border-blue-500 outline-none"
-                              placeholder="輸入密碼 (預設 888888)"
-                              value={passwordInput}
-                              onChange={e => setPasswordInput(e.target.value)}
-                              onKeyDown={e => e.key === 'Enter' && handleLogin()}
-                              autoFocus
-                          />
-                      </div>
+                      <input type="password" className="w-full text-center border-2 border-gray-300 rounded-lg p-3 text-lg tracking-widest focus:border-blue-500 outline-none mb-4" placeholder="輸入密碼 (預設 888888)" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLogin()} autoFocus />
                       {loginError && <div className="text-red-500 text-sm mb-4">{loginError}</div>}
-                      
                       <button onClick={handleLogin} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 mb-3">登入</button>
-                      <button onClick={() => { setLoginTargetMember(null); setLoginError(''); setPasswordInput(''); }} className="text-gray-500 text-sm">返回選擇使用者</button>
+                      <button onClick={() => { setLoginTargetMember(null); setLoginError(''); setPasswordInput(''); }} className="text-gray-500 text-sm">返回</button>
                   </div>
               </div>
           )
       }
-      
       return (
           <div className="h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
              <div className="text-center mb-10">
-                 {/* App Logo Image Placeholder */}
-                 <div className="w-24 h-24 mx-auto mb-4 rounded-3xl shadow-lg overflow-hidden bg-white">
-                     <img src="/app-icon.png" alt="Charles Family" className="w-full h-full object-cover" onError={(e)=>{e.target.style.display='none';}}/>
-                     <div className="w-full h-full flex items-center justify-center text-blue-600 text-4xl font-bold" style={{display: 'none'}}>C</div>
+                 <div className="w-24 h-24 mx-auto mb-4 rounded-3xl shadow-lg bg-blue-600 flex items-center justify-center text-white text-5xl font-bold overflow-hidden">
+                     {/* Safe fallback for logo */}
+                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-16 h-16"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
                  </div>
                  <h1 className="text-3xl font-bold text-gray-800">Charles Family App</h1>
                  <p className="text-gray-500">請選擇您的身分登入</p>
              </div>
-             
              <div className="grid grid-cols-2 gap-4 w-full max-w-md">
                 {members.map(m => (
-                    <button 
-                        key={m.id} 
-                        onClick={() => setLoginTargetMember(m)}
-                        className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md border border-transparent hover:border-blue-200 transition-all flex flex-col items-center gap-3"
-                    >
-                        <div className={`w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold ${m.color}`}>
-                            {m.name[0]}
-                        </div>
+                    <button key={m.id} onClick={() => setLoginTargetMember(m)} className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md border border-transparent hover:border-blue-200 transition-all flex flex-col items-center gap-3">
+                        <div className={`w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold ${m.color}`}>{m.name[0]}</div>
                         <span className="font-bold text-gray-700">{m.name.split(' ')[0]}</span>
                     </button>
                 ))}
@@ -504,335 +460,98 @@ export default function App() {
       );
   };
 
-  const renderPrintPreview = () => {
-    if (!showPrintPreview) return null;
-    const { trip } = showPrintPreview;
-    const estimate = getLuggageEstimate(trip);
-
-    return (
-      <div className="fixed inset-0 bg-gray-800/90 z-[100] overflow-y-auto">
-        <div className="min-h-screen flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-4xl min-h-[80vh] rounded shadow-2xl overflow-hidden flex flex-col">
-            <div className="bg-gray-100 p-4 border-b flex justify-between items-center print:hidden">
-              <h3 className="font-bold flex items-center gap-2"><Printer/> 報告預覽</h3>
-              <div className="flex gap-2">
-                <button onClick={() => window.print()} className="bg-blue-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-blue-700"><Printer size={16}/> 列印報告</button>
-                <button onClick={() => setShowPrintPreview(null)} className="bg-gray-300 px-4 py-2 rounded hover:bg-gray-400">關閉</button>
-              </div>
-            </div>
-            <div className="p-10 bg-white text-gray-800 print:p-0">
-               <div className="border-b-2 border-blue-600 pb-4 mb-8 flex justify-between items-end">
-                  <div>
-                    <h1 className="text-3xl font-bold text-blue-900 mb-2">旅行行程與執行李報告</h1>
-                    <div className="text-gray-500">Charles Family App • 自動生成</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-2xl font-bold">{trip.destination}</div>
-                    <div className="text-gray-600">{trip.startDate} 至 {trip.endDate}</div>
-                  </div>
-                </div>
-                {/* Details Grid */}
-                <div className="grid grid-cols-2 gap-8 mb-8">
-                <div className="bg-gray-50 p-6 rounded-lg border">
-                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Info size={20}/> 行程概覽</h3>
-                  <div className="space-y-2">
-                    <div className="flex justify-between border-b pb-1"><span>天數</span> <span className="font-bold">{getDaysDiff(trip.startDate, trip.endDate)} 天</span></div>
-                    <div className="flex justify-between border-b pb-1"><span>交通</span> <span className="font-bold">{trip.arrivalType} ({trip.arrivalDetail})</span></div>
-                    <div className="flex justify-between border-b pb-1"><span>當地</span> <span className="font-bold">{trip.localTransport}</span></div>
-                    <div className="flex justify-between border-b pb-1"><span>住宿</span> <span className="font-bold">{trip.hotelStar}星 ({trip.hotelType})</span></div>
-                    <div className="flex justify-between border-b pb-1"><span>人數</span> <span className="font-bold">{trip.participants.length} 人</span></div>
-                    <div className="flex justify-between pt-2">
-                      <span className="flex items-center gap-1"><Weight size={16}/> 預估重量</span> 
-                      <span className="font-bold text-blue-600">{estimate.totalWeight} kg</span>
-                    </div>
-                  </div>
-                </div>
-                <div className="bg-orange-50 p-6 rounded-lg border border-orange-100">
-                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Luggage size={20}/> 共用物品清單</h3>
-                  <ul className="list-disc pl-5 space-y-1">
-                    {trip.packingList?.shared?.map((item, i) => (
-                      <li key={i} className="text-sm">{item.name} <span className="text-gray-400">x{item.qty}</span></li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-6">
-                 {Object.entries(trip.packingList?.individual || {}).map(([uid, items]) => {
-                     const m = members.find(mem => mem.id === uid);
-                     if (!m) return null;
-                     return (
-                       <div key={uid} className="break-inside-avoid">
-                         <div className={`font-bold mb-2 px-2 py-1 rounded ${m.color}`}>{m.name}</div>
-                         <ul className="space-y-1">
-                           {items.map((item, i) => (
-                             <li key={i} className="flex items-center gap-2 text-sm border-b border-dashed border-gray-100 pb-1">
-                               <div className="w-4 h-4 border border-gray-300 rounded-sm"></div>
-                               <span className="flex-1">{item.name}</span>
-                               <span className="text-gray-400 text-xs">x{item.qty}</span>
-                             </li>
-                           ))}
-                         </ul>
-                       </div>
-                     );
-                  })}
+  const renderModals = () => (
+      <>
+        {/* Event Form Modal */}
+        {showEventModal && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+              <h3 className="text-lg font-bold mb-4">{editingItem?.id ? '修改日程' : '新增日程'}</h3>
+              <div className="space-y-4">
+                 <input className="w-full border rounded p-2 font-bold" placeholder="標題" value={eventFormData.title} onChange={e => setEventFormData({...eventFormData, title: e.target.value})} />
+                 <div className="flex flex-wrap gap-2">{categories.map(cat => (<button key={cat.id} onClick={() => setEventFormData({...eventFormData, type: cat.id})} className={`px-3 py-1 text-xs rounded border ${eventFormData.type === cat.id ? `${cat.color} font-bold` : 'text-gray-500'}`}>{cat.name}</button>))}</div>
+                 <div className="flex gap-2"><input type="date" className="w-full border rounded p-2" value={eventFormData.date} onChange={e => setEventFormData({...eventFormData, date: e.target.value})} /><input type="time" className="w-full border rounded p-2" value={eventFormData.startTime} onChange={e => setEventFormData({...eventFormData, startTime: e.target.value})} /></div>
+                 <div><label className="text-xs text-gray-500">參與者</label><div className="flex flex-wrap gap-2">{members.map(m => (<button key={m.id} onClick={() => { const newP = eventFormData.participants.includes(m.id) ? eventFormData.participants.filter(p => p !== m.id) : [...eventFormData.participants, m.id]; setEventFormData({...eventFormData, participants: newP}); }} className={`px-2 py-1 rounded text-xs border ${eventFormData.participants.includes(m.id) ? `${m.color}` : 'bg-gray-50'}`}>{m.name.split(' ')[0]}</button>))}</div></div>
+                 <textarea className="w-full border rounded p-2 h-20 text-sm" placeholder="備註..." value={eventFormData.notes} onChange={e => setEventFormData({...eventFormData, notes: e.target.value})}></textarea>
+                 <div className="flex gap-2 pt-2">{editingItem?.id && <button onClick={() => deleteItem('events', editingItem.id)} className="px-4 py-2 text-red-500 border rounded"><Trash2/></button>}<button onClick={() => setShowEventModal(false)} className="flex-1 px-4 py-2 bg-gray-100 rounded">取消</button><button onClick={saveEvent} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded">儲存</button></div>
               </div>
             </div>
           </div>
-        </div>
-      </div>
-    );
-  };
+        )}
 
-  const renderCalendarHeader = () => (
-    <div className="flex items-center justify-between p-4 border-b">
-      <div className="flex items-center gap-4">
-        <h2 className="text-xl font-bold">{currentDate.getFullYear()}年 {calendarView !== 'year' && `${currentDate.getMonth()+1}月`}</h2>
-        <div className="flex bg-gray-100 rounded p-1">
-          {['day','month','year'].map(v => (
-            <button key={v} onClick={() => setCalendarView(v)} className={`px-3 py-1 text-xs rounded capitalize ${calendarView===v?'bg-white shadow':''}`}>
-              {v === 'day' ? '日' : v === 'month' ? '月' : '年'}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="flex gap-2">
-         <button onClick={() => { const d = new Date(currentDate); calendarView==='year'?d.setFullYear(d.getFullYear()-1):calendarView==='month'?d.setMonth(d.getMonth()-1):d.setDate(d.getDate()-1); setCurrentDate(d); }} className="p-1 hover:bg-gray-100 rounded"><ChevronLeft/></button>
-         <button onClick={() => setCurrentDate(new Date())} className="text-sm px-3 bg-gray-100 rounded hover:bg-gray-200">今天</button>
-         <button onClick={() => { const d = new Date(currentDate); calendarView==='year'?d.setFullYear(d.getFullYear()+1):calendarView==='month'?d.setMonth(d.getMonth()+1):d.setDate(d.getDate()+1); setCurrentDate(d); }} className="p-1 hover:bg-gray-100 rounded"><ChevronRight/></button>
-      </div>
-    </div>
-  );
-
-  const renderCalendar = () => {
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-
-    if (calendarView === 'year') {
-      const months = Array.from({length: 12}, (_, i) => i);
-      return (
-        <div className="bg-white rounded-lg shadow h-full flex flex-col">
-          {renderCalendarHeader()}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4 overflow-y-auto">
-            {months.map(m => (
-              <div key={m} className="border rounded p-2 hover:shadow-md cursor-pointer bg-white" onClick={() => { setCurrentDate(new Date(year, m, 1)); setCalendarView('month'); }}>
-                <div className="text-center font-bold mb-2 bg-gray-50 rounded py-1">{m+1}月</div>
-                <div className="grid grid-cols-7 gap-1 text-[8px] text-center text-gray-400">
-                  {['日','一','二','三','四','五','六'].map(d => <div key={d} className={d==='日'||d==='六'?'text-red-400':''}>{d}</div>)}
-                  {Array.from({length: new Date(year, m, 1).getDay()}).map((_, i) => <div key={`e-${i}`}></div>)}
-                  {Array.from({length: new Date(year, m+1, 0).getDate()}).map((_, i) => {
-                    const dStr = formatDate(new Date(year, m, i+1));
-                    const isHol = HK_HOLIDAYS[dStr];
-                    const hasTrip = trips.some(t => isDateInRange(dStr, t.startDate, t.endDate));
-                    return (
-                      <div key={i} className={`rounded-full h-5 w-5 flex items-center justify-center ${isHol ? 'bg-red-100 text-red-600 font-bold' : hasTrip ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100'}`}>
-                        {i+1}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      );
-    }
-    // ... (rest of calendar view logic remains same)
-    // For brevity, inserting day/month views
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const firstDay = new Date(year, month, 1).getDay();
-    const days = [];
-    if (calendarView === 'day') {
-       // ... day view logic
-       const hours = Array.from({length: 18}, (_, i) => i + 6);
-       const dStr = formatDate(currentDate);
-       const dayEvents = events.filter(e => e.date === dStr);
-       return (
-        <div className="flex flex-col h-full bg-white rounded-lg shadow overflow-hidden">
-           {renderCalendarHeader()} 
-           <div className="p-4 border-b flex justify-between items-center bg-gray-50">
-             <h2 className="text-xl font-bold">{dStr} {HK_HOLIDAYS[dStr] ? `(${HK_HOLIDAYS[dStr]})` : ''}</h2>
-             <div className="text-sm text-gray-500">{getLunarInfo(currentDate).dayText} {getLunarInfo(currentDate).auspicious}</div>
-           </div>
-           <div className="flex-1 overflow-y-auto relative">
-             {hours.map(h => (
-               <div key={h} className="flex border-b h-24 relative group">
-                 <div className="w-20 text-right pr-4 py-2 text-sm text-gray-500 border-r bg-gray-50 flex-shrink-0">{h}:00</div>
-                 <div className="flex-1 relative p-1 hover:bg-blue-50/30 cursor-pointer" 
-                      onClick={() => { setSelectedDate(currentDate); setEditingItem({ startTime: `${h}:00` }); setShowEventModal(true); }}>
-                    {dayEvents.filter(e => parseInt(e.startTime) === h).map(ev => {
-                       const cat = categories.find(c => c.id === ev.type) || categories[0];
-                       return (
-                         <div key={ev.id} onClick={(e) => { e.stopPropagation(); setEditingItem(ev); setShowEventModal(true); }} className={`absolute left-2 right-2 rounded p-2 text-sm border-l-4 shadow-sm z-10 ${cat.color}`}>
-                           <div className="font-bold flex justify-between"><span>{ev.title}</span><span className="opacity-75">{ev.startTime}-{ev.endTime}</span></div>
-                         </div>
-                       );
-                    })}
+        {/* Expense Form Modal */}
+        {showExpenseModal && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+              <h3 className="text-lg font-bold mb-4">{editingItem?.id ? '修改開支' : '新增開支'}</h3>
+              <div className="space-y-3">
+                 <div><label className="text-xs text-gray-500">項目</label><input className="w-full border rounded p-2" value={expenseFormData.name} onChange={e => setExpenseFormData({...expenseFormData, name: e.target.value})} /></div>
+                 <div className="flex gap-2"><button onClick={() => setExpenseFormData({...expenseFormData, type: 'recurring_monthly'})} className={`flex-1 py-1 text-xs rounded border ${expenseFormData.type==='recurring_monthly'?'bg-blue-100 border-blue-500':''}`}>每月</button><button onClick={() => setExpenseFormData({...expenseFormData, type: 'recurring_yearly'})} className={`flex-1 py-1 text-xs rounded border ${expenseFormData.type==='recurring_yearly'?'bg-blue-100 border-blue-500':''}`}>每年</button></div>
+                 <div className="grid grid-cols-2 gap-3">
+                    <div><label className="text-xs text-gray-500">金額</label><input type="number" className="w-full border rounded p-2" value={expenseFormData.amount} onChange={e => setExpenseFormData({...expenseFormData, amount: Number(e.target.value)})} /></div>
+                    {expenseFormData.type === 'recurring_yearly' ? <div className="flex gap-1"><input type="number" placeholder="月" className="w-1/2 border rounded p-2" value={expenseFormData.month} onChange={e => setExpenseFormData({...expenseFormData, month: Number(e.target.value)})}/><input type="number" placeholder="日" className="w-1/2 border rounded p-2" value={expenseFormData.day} onChange={e => setExpenseFormData({...expenseFormData, day: Number(e.target.value)})}/></div> : <div><label className="text-xs text-gray-500">扣數日</label><input type="number" className="w-full border rounded p-2" value={expenseFormData.day} onChange={e => setExpenseFormData({...expenseFormData, day: Number(e.target.value)})}/></div>}
                  </div>
-               </div>
-             ))}
-           </div>
-        </div>
-       );
-    }
-    
-    // Month View Render
-    for (let i = 0; i < firstDay; i++) days.push(<div key={`empty-${i}`} className="h-28 bg-gray-50/30 border-r border-b"></div>);
-    for (let d = 1; d <= daysInMonth; d++) {
-      const dateObj = new Date(year, month, d);
-      const dateStr = formatDate(dateObj);
-      const isToday = formatDate(new Date()) === dateStr;
-      const holiday = HK_HOLIDAYS[dateStr];
-      const lunar = getLunarInfo(dateObj);
-      const dayEvents = events.filter(e => e.date === dateStr);
-      const activeTrips = trips.filter(t => isDateInRange(dateStr, t.startDate, t.endDate));
-      const dayExpenses = expenses.filter(e => (e.type === 'recurring_monthly' && e.day === d) || (e.type === 'recurring_yearly' && e.month === month + 1 && e.day === d));
+                 <div className="grid grid-cols-2 gap-3"><div><label className="text-xs text-gray-500">類別</label><select className="w-full border rounded p-2" value={expenseFormData.category} onChange={e => setExpenseFormData({...expenseFormData, category: e.target.value})}>{['樓宇','信用卡','保險','日常','貸款','其他'].map(c => <option key={c}>{c}</option>)}</select></div><div><label className="text-xs text-gray-500">銀行</label><input className="w-full border rounded p-2" value={expenseFormData.bank} onChange={e => setExpenseFormData({...expenseFormData, bank: e.target.value})}/></div></div>
+                 <div className="flex gap-2 pt-4">{editingItem?.id && <button onClick={() => deleteItem('expenses', editingItem.id)} className="px-4 py-2 text-red-500 border rounded"><Trash2/></button>}<button onClick={() => setShowExpenseModal(false)} className="flex-1 px-4 py-2 bg-gray-100 rounded">取消</button><button onClick={saveExpense} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded">儲存</button></div>
+              </div>
+            </div>
+          </div>
+        )}
 
-      days.push(
-        <div key={d} onClick={() => { setSelectedDate(dateObj); setEditingItem(null); setShowEventModal(true); }} className={`h-28 border-r border-b p-1 relative hover:bg-blue-50 transition-colors ${isToday ? 'bg-blue-50' : 'bg-white'}`}>
-           <div className="flex justify-between items-start">
-             <span className={`text-sm font-semibold w-6 h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-blue-600 text-white' : 'text-gray-700'}`}>{d}</span>
-             <div className="flex flex-col items-end">
-               <span className="text-[10px] text-gray-400">{lunar.dayText}</span>
-               {lunar.auspicious && <span className="text-[9px] text-orange-500 scale-90 origin-right border border-orange-200 rounded px-0.5 bg-orange-50">{lunar.auspicious}</span>}
-               {holiday && <span className="text-[10px] text-red-500 font-bold">{holiday}</span>}
+        {/* Trip Wizard */}
+        {showTripWizard && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+             <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg">
+                <h3 className="font-bold text-lg mb-4">新增旅行計劃</h3>
+                <div className="space-y-4">
+                   <div><label className="block text-xs font-bold mb-1">目的地</label><input className="border w-full p-2 rounded mb-2" value={tripWizardData.destination} onChange={e => setTripWizardData({...tripWizardData, destination: e.target.value})}/><div className="flex flex-wrap gap-2">{POPULAR_DESTINATIONS.map(city => <button key={city} onClick={() => setTripWizardData({...tripWizardData, destination: city.split(',')[0]})} className="text-xs bg-gray-100 px-2 py-1 rounded">{city.split(',')[0]}</button>)}</div></div>
+                   <div className="flex gap-4"><input type="date" className="border w-full p-2 rounded" value={tripWizardData.startDate} onChange={e => setTripWizardData({...tripWizardData, startDate: e.target.value})}/><input type="date" className="border w-full p-2 rounded" value={tripWizardData.endDate} onChange={e => setTripWizardData({...tripWizardData, endDate: e.target.value})}/></div>
+                   <div className="grid grid-cols-2 gap-4">
+                      <div><label className="block text-xs font-bold mb-1">交通</label><select className="border w-full p-2 rounded" value={tripWizardData.arrivalType} onChange={e => setTripWizardData({...tripWizardData, arrivalType: e.target.value})}><option value="Flight">飛機</option><option value="Train">高鐵</option></select></div>
+                      <div><label className="block text-xs font-bold mb-1">細節</label><select className="border w-full p-2 rounded" value={tripWizardData.arrivalDetail} onChange={e => setTripWizardData({...tripWizardData, arrivalDetail: e.target.value})}><option>直飛/直達</option><option>轉機/轉車</option></select></div>
+                   </div>
+                   <div><label className="block text-xs font-bold mb-1">當地出行</label><select className="border w-full p-2 rounded" value={tripWizardData.localTransport} onChange={e => setTripWizardData({...tripWizardData, localTransport: e.target.value})}><option>公共交通</option><option>自駕</option><option>包車</option></select></div>
+                   <div className="grid grid-cols-2 gap-4">
+                      <div><label className="block text-xs font-bold mb-1">星級</label><input type="number" className="border w-full p-2 rounded" value={tripWizardData.hotelStar} onChange={e => setTripWizardData({...tripWizardData, hotelStar: parseInt(e.target.value)})}/></div>
+                      <div><label className="block text-xs font-bold mb-1">類型</label><select className="border w-full p-2 rounded" value={tripWizardData.hotelType} onChange={e => setTripWizardData({...tripWizardData, hotelType: e.target.value})}><option value="City Hotel">酒店</option><option value="Resort">度假村</option></select></div>
+                   </div>
+                   <button onClick={finishTripWizard} className="w-full bg-blue-600 text-white py-3 rounded font-bold mt-4">建立</button>
+                   <button onClick={() => setShowTripWizard(false)} className="w-full text-gray-500 py-2">取消</button>
+                </div>
              </div>
-           </div>
-           <div className="mt-1 flex flex-col gap-0.5 overflow-hidden h-[calc(100%-24px)]">
-             {activeTrips.map(t => (<div key={t.id} className="text-[9px] text-white px-1 truncate rounded-sm bg-blue-400 flex items-center"><Plane size={8} className="mr-1"/> {t.destination}</div>))}
-             {dayExpenses.length > 0 && (<div className="text-[9px] bg-orange-50 text-orange-700 px-1 rounded border border-orange-100 flex items-center gap-1"><CreditCard size={8}/> ${dayExpenses.reduce((a,b)=>a+Number(b.amount||0),0).toLocaleString()}</div>)}
-             {dayEvents.slice(0, 3).map(ev => {
-               const cat = categories.find(c => c.id === ev.type) || categories[0];
-               return (<div key={ev.id} onMouseEnter={(e) => setHoveredEvent({ event: ev, x: e.clientX, y: e.clientY })} onMouseLeave={() => setHoveredEvent(null)} className={`text-[9px] px-1 rounded truncate border ${cat.color} cursor-help`}>{ev.title}</div>);
-             })}
-           </div>
-        </div>
-      );
-    }
-    return (
-      <div className="bg-white rounded-lg shadow h-full flex flex-col">
-        {renderCalendarHeader()}
-        <div className="grid grid-cols-7 border-b bg-gray-50 text-center py-1 text-sm text-gray-500"><div>日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div></div>
-        <div className="grid grid-cols-7 flex-1 overflow-y-auto">{days}</div>
-        <Tooltip/>
-      </div>
-    );
-  };
+          </div>
+        )}
 
-  const renderExpenses = () => {
-     const currentMonthIndex = new Date().getMonth(); 
-     const currentYear = new Date().getFullYear();
-     const currentMonthKey = `paid_${currentYear}_${currentMonthIndex}`;
-     
-     const monthlyExpenses = expenses.filter(e => {
-       if (e.type === 'recurring_monthly') return true;
-       if (e.type === 'recurring_yearly' && e.month === (currentMonthIndex + 1)) return true;
-       return false;
-     });
+        {/* Add Member Modal */}
+        {showAddMemberModal && (
+          <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+              <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-sm">
+                  <h3 className="font-bold text-lg mb-4">新增成員</h3>
+                  <input className="w-full border p-2 rounded mb-4" placeholder="名稱" value={memberFormData.name} onChange={e => setMemberFormData({...memberFormData, name: e.target.value})} />
+                  <select className="w-full border p-2 rounded mb-4" value={memberFormData.role} onChange={e => setMemberFormData({...memberFormData, role: e.target.value})}><option value="member">一般</option><option value="admin">管理員</option></select>
+                  <div className="flex gap-2 justify-end"><button onClick={() => setShowAddMemberModal(false)} className="px-4 py-2 bg-gray-100 rounded">取消</button><button onClick={handleAddMember} className="px-4 py-2 bg-blue-600 text-white rounded">新增</button></div>
+              </div>
+          </div>
+        )}
 
-     const totalBudget = monthlyExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
-     const paidAmount = monthlyExpenses.reduce((sum, e) => {
-        const isPaid = (e.paidMonths || []).includes(currentMonthKey);
-        return sum + (isPaid ? (e.amount || 0) : 0);
-     }, 0);
-     const unpaidAmount = totalBudget - paidAmount;
-
-     const grouped = {
-        '樓宇': { icon: Home, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200', items: [] },
-        '信用卡': { icon: CreditCard, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-200', items: [] },
-        '保險': { icon: Shield, color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-200', items: [] },
-        '日常': { icon: Zap, color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200', items: [] },
-        '貸款': { icon: DollarSign, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200', items: [] },
-        '其他': { icon: Info, color: 'text-gray-600', bg: 'bg-gray-50', border: 'border-gray-200', items: [] }
-     };
-
-     expenses.forEach(e => {
-        const cat = Object.keys(grouped).find(k => e.category.includes(k)) || '其他';
-        grouped[cat].items.push(e);
-     });
-
-     return (
-        <div className="bg-white rounded-lg shadow h-full overflow-y-auto p-6">
-           <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold flex items-center gap-2"><CreditCard/> 家庭開支</h2>
-              <button onClick={() => setShowExpenseModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded flex items-center gap-2 shadow hover:bg-blue-700 transition"><Plus size={16}/> 新增</button>
-           </div>
-           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 shadow-sm flex flex-col"><span className="text-xs text-blue-500 font-bold uppercase mb-1 flex items-center gap-1"><PieChart size={12}/> 本月總預算</span><span className="text-2xl font-bold text-blue-900">{formatMoney(totalBudget)}</span></div>
-              <div className="bg-green-50 border border-green-100 rounded-xl p-4 shadow-sm flex flex-col"><span className="text-xs text-green-500 font-bold uppercase mb-1 flex items-center gap-1"><CheckSquare size={12}/> 已付金額</span><span className="text-2xl font-bold text-green-700">{formatMoney(paidAmount)}</span></div>
-              <div className="bg-red-50 border border-red-100 rounded-xl p-4 shadow-sm flex flex-col"><span className="text-xs text-red-500 font-bold uppercase mb-1 flex items-center gap-1"><Wallet size={12}/> 待付金額</span><span className="text-2xl font-bold text-red-600">{formatMoney(unpaidAmount)}</span></div>
-           </div>
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {Object.entries(grouped).map(([key, group]) => {
-                 if (group.items.length === 0) return null;
-                 const paidCount = group.items.filter(i => (i.paidMonths||[]).includes(currentMonthKey)).length;
-                 const progress = Math.round((paidCount / group.items.length) * 100);
-                 return (
-                    <div key={key} className={`rounded-xl border ${group.border} overflow-hidden shadow-sm hover:shadow-md transition-shadow`}>
-                       <div className={`p-4 ${group.bg} flex justify-between items-center border-b ${group.border}`}>
-                          <h3 className={`font-bold text-lg flex items-center gap-2 ${group.color}`}><group.icon size={20}/> {key}</h3>
-                          <div className="text-xs font-bold bg-white px-2 py-1 rounded shadow-sm">{paidCount}/{group.items.length} 已付</div>
-                       </div>
-                       <div className="h-1 w-full bg-gray-100"><div className={`h-1 transition-all duration-500 ${group.color.replace('text','bg')}`} style={{width: `${progress}%`}}></div></div>
-                       <div className="p-2">
-                          {group.items.map(item => {
-                             const isPaid = (item.paidMonths || []).includes(currentMonthKey);
-                             return (
-                                <div key={item.id} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg group">
-                                   <div className="flex items-center gap-3">
-                                      <button onClick={() => handleToggleExpensePaid(item.id)} className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isPaid ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 hover:border-green-500'}`}>{isPaid && <Check size={12}/>}</button>
-                                      <div><div className={`font-medium text-sm ${isPaid ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{item.name}</div><div className="text-xs text-gray-500 flex items-center gap-2"><span>{item.day}號</span></div></div>
-                                   </div>
-                                   <div className="text-right"><div className="font-mono font-bold text-sm">{formatMoney(item.amount)}</div><div className="flex gap-2 justify-end opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => { setEditingItem(item); setShowExpenseModal(true); }} className="text-blue-500 hover:text-blue-700"><Edit2 size={12}/></button><button onClick={() => deleteItem('expenses', item.id)} className="text-gray-400 hover:text-red-500"><Trash2 size={12}/></button></div></div>
-                                </div>
-                             )
-                          })}
-                       </div>
-                    </div>
-                 );
-              })}
-           </div>
-        </div>
-     );
-  };
-
-  const renderSettings = () => (
-    <div className="max-w-3xl mx-auto bg-white rounded-lg shadow p-8 overflow-y-auto">
-      <h2 className="text-2xl font-bold mb-8 flex items-center gap-2"><Settings/> 系統設定</h2>
-      <section className="mb-8">
-        <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">當前登入</h3>
-        <div className="flex items-center justify-between bg-blue-50 p-4 rounded-xl border border-blue-100">
-           <div className="flex items-center gap-3">
-              <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold ${currentUserRole.color}`}>{currentUserRole.name[0]}</div>
-              <div><div className="font-bold text-gray-800">{currentUserRole.name}</div><div className="text-xs text-gray-500">{currentUserRole.role === 'admin' ? '管理員' : '一般成員'}</div></div>
-           </div>
-           <button onClick={handleLogout} className="flex items-center gap-2 text-red-500 hover:text-red-700 text-sm font-bold bg-white px-4 py-2 rounded shadow-sm"><LogOut size={16}/> 登出</button>
-        </div>
-      </section>
-      <section className="mb-8">
-        <div className="flex justify-between items-center mb-4 border-b pb-2"><h3 className="font-bold text-gray-700">家庭成員管理</h3>{currentUserRole.role === 'admin' && (<button onClick={() => setShowAddMemberModal(true)} className="text-sm bg-blue-600 text-white px-3 py-1 rounded flex items-center gap-1 hover:bg-blue-700"><Plus size={14}/> 新增成員</button>)}</div>
-        <div className="space-y-2">
-          {members.map(m => (
-             <div key={m.id} className="flex items-center justify-between p-3 bg-gray-50 rounded">
-                <div className="flex items-center gap-3"><div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${m.color}`}>{m.name[0]}</div><div><div className="font-bold text-gray-800">{m.name}</div><div className="text-xs text-gray-500">{m.role === 'admin' ? '管理員' : '一般成員'}</div></div></div>
-                {currentUserRole.role === 'admin' && (<div className="flex gap-2"><button onClick={() => { setTargetMemberId(m.id); setShowChangePasswordModal(true); }} className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded text-gray-600 hover:bg-gray-100 flex items-center gap-1"><Key size={12}/> 重設密碼</button></div>)}
-             </div>
-          ))}
-        </div>
-      </section>
-      <section className="mb-8">
-        <div className="flex justify-between items-center mb-4 border-b pb-2"><h3 className="font-bold text-gray-700">日曆項目分類 (Highlight)</h3><button onClick={() => handleUpdateCategory({ name: '新分類', color: 'bg-gray-100 text-gray-800 border-gray-200' })} className="text-sm text-blue-600 flex items-center gap-1"><Plus size={14}/> 新增</button></div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-           {categories.map(c => (
-             <div key={c.id} className={`p-3 rounded border flex justify-between items-center ${c.color}`}>
-               <input value={c.name} disabled={c.type === 'system'} onChange={(e) => handleUpdateCategory({...c, name: e.target.value})} className="bg-transparent outline-none font-bold w-full"/>
-               {c.type === 'custom' && (<div className="flex items-center gap-2"><button className="text-gray-400 hover:text-red-500" onClick={() => setCategories(categories.filter(x => x.id !== c.id))}><Trash2 size={14}/></button></div>)}
-             </div>
-           ))}
-        </div>
-      </section>
-    </div>
+        {/* Change Password Modal */}
+        {showChangePasswordModal && (
+          <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+              <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-sm">
+                  <h3 className="font-bold text-lg mb-4">重設密碼</h3>
+                  <input className="w-full border p-2 rounded text-center mb-4" placeholder="新密碼" value={newPassword} onChange={e => setNewPassword(e.target.value)} />
+                  <div className="flex gap-2 justify-end"><button onClick={() => setShowChangePasswordModal(false)} className="px-4 py-2 bg-gray-100 rounded">取消</button><button onClick={handleChangePassword} className="px-4 py-2 bg-blue-600 text-white rounded">確認</button></div>
+              </div>
+          </div>
+        )}
+        
+        {/* Packing Mode & Print */}
+        {showTripEditModal && editingItem && <PackingMode trip={editingItem}/>}
+        {showPrintPreview && renderPrintPreview()}
+      </>
   );
 
+  // Main Render
   if (loading) return <div className="h-screen flex items-center justify-center">載入中...</div>;
   if (authError) return (
     <div className="h-screen flex flex-col items-center justify-center p-8 bg-gray-50 text-center">
@@ -845,6 +564,7 @@ export default function App() {
     </div>
   );
 
+  // If not logged in app-level auth
   if (!currentUserRole) {
       return renderLoginScreen();
   }
@@ -882,7 +602,7 @@ export default function App() {
             <div className="space-y-6">
                <div className="flex justify-between items-center">
                  <h2 className="text-2xl font-bold flex items-center gap-2"><Plane/> 旅行計劃</h2>
-                 <button onClick={() => setShowTripWizard(true)} className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 flex items-center gap-2"><Plus size={16}/> 新行程</button>
+                 <button onClick={openTripWizard} className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 flex items-center gap-2"><Plus size={16}/> 新行程</button>
                </div>
                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                  {trips.map(trip => (
@@ -910,15 +630,10 @@ export default function App() {
            ))}
         </div>
       </div>
-
-      {/* Overlays */}
-      <EventFormModal />
-      <ExpenseFormModal />
-      <TripWizard />
-      {showTripEditModal && editingItem && <PackingMode trip={editingItem}/>}
-      {showPrintPreview && renderPrintPreview()}
-      <AddMemberModal />
-      <ChangePasswordModal />
+      
+      {/* Tooltip & Modals */}
+      <Tooltip />
+      {renderModals()}
     </div>
   );
 }
