@@ -158,9 +158,7 @@ const getLunarInfo = (date) => {
   const special = LUNAR_DATA.find(d => d.day === day);
   if (special) return { dayText: special.text, auspicious: special.ausp };
   
-  const lunarDays = ["初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十", 
-                     "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十",
-                     "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"];
+  const lunarDays = ["初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十", "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十", "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"];
   const idx = (day - 1) % 30;
   const randAusp = (day % 5 === 0) ? '宜會友' : (day % 7 === 0 ? '忌遠行' : '');
   return { dayText: lunarDays[idx], auspicious: randAusp };
@@ -223,8 +221,17 @@ export default function App() {
     script.src = "https://cdn.tailwindcss.com";
     script.async = true;
     document.head.appendChild(script);
+
     const style = document.createElement('style');
-    style.innerHTML = `body { font-family: system-ui, -apple-system, sans-serif; background: #f3f4f6; } .flex { display: flex; } .hidden { display: none; }`;
+    style.innerHTML = `
+      body { font-family: system-ui, -apple-system, sans-serif; background: #f3f4f6; }
+      .flex { display: flex; }
+      .flex-col { flex-direction: column; }
+      .h-screen { height: 100vh; }
+      .w-full { width: 100%; }
+      .hidden { display: none; }
+      @media (min-width: 768px) { .md\\:flex { display: flex; } .md\\:hidden { display: none; } }
+    `;
     document.head.appendChild(style);
   }, []);
 
@@ -232,7 +239,6 @@ export default function App() {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // Try local persistence first, fallback to memory if blocked (e.g. in iframe)
         try { await setPersistence(auth, browserLocalPersistence); } catch (e) { await setPersistence(auth, inMemoryPersistence); }
         await signInAnonymously(auth);
       } catch (err) { setAuthError(err.message); setLoading(false); }
@@ -249,34 +255,19 @@ export default function App() {
     const unsubMembers = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'members')), (snap) => {
         const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         if (data.length === 0) {
-            DEFAULT_MEMBERS_SEED.forEach(async (m) => {
-                await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'members'), {
-                    ...m, createdAt: serverTimestamp()
-                });
-            });
+            DEFAULT_MEMBERS_SEED.forEach(async (m) => addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'members'), { ...m, createdAt: serverTimestamp() }));
         } else {
             setMembers(data);
         }
         setLoading(false);
     });
-
-    const unsubEvents = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'events')), 
-      (snap) => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-    );
-    
-    const unsubExpenses = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses')), 
-      (snap) => {
+    const unsubEvents = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'events')), (snap) => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubExpenses = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses')), (snap) => {
         const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         setExpenses(data);
-        if (data.length === 0) {
-          INITIAL_EXPENSES.forEach(e => addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses'), { ...e, createdAt: serverTimestamp() }));
-        }
-      }
-    );
-
-    const unsubTrips = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'trips')), 
-      (snap) => setTrips(snap.docs.map(d => ({ id: d.id, ...d.data() })))
-    );
+        if (data.length === 0) INITIAL_EXPENSES.forEach(e => addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses'), { ...e, createdAt: serverTimestamp() }));
+    });
+    const unsubTrips = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'trips')), (snap) => setTrips(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
 
     return () => { unsubMembers(); unsubEvents(); unsubExpenses(); unsubTrips(); };
   }, [user]);
@@ -439,7 +430,7 @@ export default function App() {
     }
   };
 
-  // --- Render Functions (To prevent focus loss) ---
+  // --- Render Functions ---
 
   const renderLoginScreen = () => {
       if (loginTargetMember) {
@@ -459,8 +450,10 @@ export default function App() {
       return (
           <div className="h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
              <div className="text-center mb-10">
-                 <div className="w-24 h-24 mx-auto mb-4 rounded-3xl shadow-lg bg-blue-600 flex items-center justify-center text-white text-5xl font-bold overflow-hidden">
-                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-16 h-16"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                 {/* App Logo */}
+                 <div className="w-24 h-24 mx-auto mb-4 rounded-3xl shadow-lg overflow-hidden bg-white">
+                     <img src="/app-icon.png" alt="Charles Family" className="w-full h-full object-cover" onError={(e)=>{e.target.style.display='none'; e.target.nextSibling.style.display='flex'}}/>
+                     <div className="w-full h-full flex items-center justify-center bg-blue-600 text-white text-5xl font-bold" style={{display: 'none'}}>C</div>
                  </div>
                  <h1 className="text-3xl font-bold text-gray-800">Charles Family App</h1>
                  <p className="text-gray-500">請選擇您的身分登入</p>
@@ -566,6 +559,26 @@ export default function App() {
         {showTripEditModal && editingItem && <PackingMode trip={editingItem}/>}
         {showPrintPreview && renderPrintPreview()}
       </>
+  );
+
+  const renderCalendarHeader = () => (
+    <div className="flex items-center justify-between p-4 border-b">
+      <div className="flex items-center gap-4">
+        <h2 className="text-xl font-bold">{currentDate.getFullYear()}年 {calendarView !== 'year' && `${currentDate.getMonth()+1}月`}</h2>
+        <div className="flex bg-gray-100 rounded p-1">
+          {['day','month','year'].map(v => (
+            <button key={v} onClick={() => setCalendarView(v)} className={`px-3 py-1 text-xs rounded capitalize ${calendarView===v?'bg-white shadow':''}`}>
+              {v === 'day' ? '日' : v === 'month' ? '月' : '年'}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="flex gap-2">
+         <button onClick={() => { const d = new Date(currentDate); calendarView==='year'?d.setFullYear(d.getFullYear()-1):calendarView==='month'?d.setMonth(d.getMonth()-1):d.setDate(d.getDate()-1); setCurrentDate(d); }} className="p-1 hover:bg-gray-100 rounded"><ChevronLeft/></button>
+         <button onClick={() => setCurrentDate(new Date())} className="text-sm px-3 bg-gray-100 rounded hover:bg-gray-200">今天</button>
+         <button onClick={() => { const d = new Date(currentDate); calendarView==='year'?d.setFullYear(d.getFullYear()+1):calendarView==='month'?d.setMonth(d.getMonth()+1):d.setDate(d.getDate()+1); setCurrentDate(d); }} className="p-1 hover:bg-gray-100 rounded"><ChevronRight/></button>
+      </div>
+    </div>
   );
 
   const renderCalendar = () => {
@@ -819,6 +832,234 @@ export default function App() {
       </div>
     );
   };
+
+  const renderLoginScreen = () => {
+      if (loginTargetMember) {
+          return (
+              <div className="h-screen flex items-center justify-center bg-gray-100 p-4">
+                  <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-sm text-center">
+                      <div className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center text-3xl font-bold mb-4 ${loginTargetMember.color}`}>{loginTargetMember.name[0]}</div>
+                      <h2 className="text-2xl font-bold mb-6">歡迎, {loginTargetMember.name.split(' ')[0]}</h2>
+                      <input type="password" className="w-full text-center border-2 border-gray-300 rounded-lg p-3 text-lg tracking-widest focus:border-blue-500 outline-none mb-4" placeholder="輸入密碼 (預設 888888)" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLogin()} autoFocus />
+                      {loginError && <div className="text-red-500 text-sm mb-4">{loginError}</div>}
+                      <button onClick={handleLogin} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 mb-3">登入</button>
+                      <button onClick={() => { setLoginTargetMember(null); setLoginError(''); setPasswordInput(''); }} className="text-gray-500 text-sm">返回</button>
+                  </div>
+              </div>
+          )
+      }
+      return (
+          <div className="h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
+             <div className="text-center mb-10">
+                 {/* App Logo Image Placeholder - 優先使用上傳的圖片 */}
+                 <div className="w-24 h-24 mx-auto mb-4 rounded-3xl shadow-lg overflow-hidden bg-white">
+                     <img src="/app-icon.png" alt="Charles Family" className="w-full h-full object-cover" onError={(e)=>{e.target.style.display='none'; e.target.nextSibling.style.display='flex'}}/>
+                     <div className="w-full h-full flex items-center justify-center bg-blue-600 text-white text-5xl font-bold" style={{display: 'none'}}>C</div>
+                 </div>
+                 <h1 className="text-3xl font-bold text-gray-800">Charles Family App</h1>
+                 <p className="text-gray-500">請選擇您的身分登入</p>
+             </div>
+             <div className="grid grid-cols-2 gap-4 w-full max-w-md">
+                {members.map(m => (
+                    <button key={m.id} onClick={() => setLoginTargetMember(m)} className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md border border-transparent hover:border-blue-200 transition-all flex flex-col items-center gap-3">
+                        <div className={`w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold ${m.color}`}>{m.name[0]}</div>
+                        <span className="font-bold text-gray-700">{m.name.split(' ')[0]}</span>
+                    </button>
+                ))}
+             </div>
+          </div>
+      );
+  };
+
+  const renderPrintPreview = () => {
+    if (!showPrintPreview) return null;
+    const { trip } = showPrintPreview;
+    const estimate = getLuggageEstimate(trip);
+
+    return (
+      <div className="fixed inset-0 bg-gray-800/90 z-[100] overflow-y-auto">
+        <div className="min-h-screen flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-4xl min-h-[80vh] rounded shadow-2xl overflow-hidden flex flex-col">
+            <div className="bg-gray-100 p-4 border-b flex justify-between items-center print:hidden">
+              <h3 className="font-bold flex items-center gap-2"><Printer/> 報告預覽</h3>
+              <div className="flex gap-2">
+                <button onClick={() => window.print()} className="bg-blue-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-blue-700"><Printer size={16}/> 列印報告</button>
+                <button onClick={() => setShowPrintPreview(null)} className="bg-gray-300 px-4 py-2 rounded hover:bg-gray-400">關閉</button>
+              </div>
+            </div>
+            <div className="p-10 bg-white text-gray-800 print:p-0">
+               <div className="border-b-2 border-blue-600 pb-4 mb-8 flex justify-between items-end">
+                  <div>
+                    <h1 className="text-3xl font-bold text-blue-900 mb-2">旅行行程與執行李報告</h1>
+                    <div className="text-gray-500">Charles Family App • 自動生成</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-2xl font-bold">{trip.destination}</div>
+                    <div className="text-gray-600">{trip.startDate} 至 {trip.endDate}</div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-8 mb-8">
+                <div className="bg-gray-50 p-6 rounded-lg border">
+                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Info size={20}/> 行程概覽</h3>
+                  <div className="space-y-2">
+                    <div className="flex justify-between border-b pb-1"><span>天數</span> <span className="font-bold">{getDaysDiff(trip.startDate, trip.endDate)} 天</span></div>
+                    <div className="flex justify-between border-b pb-1"><span>交通</span> <span className="font-bold">{trip.arrivalType} ({trip.arrivalDetail})</span></div>
+                    <div className="flex justify-between border-b pb-1"><span>當地</span> <span className="font-bold">{trip.localTransport}</span></div>
+                    <div className="flex justify-between border-b pb-1"><span>住宿</span> <span className="font-bold">{trip.hotelStar}星 ({trip.hotelType})</span></div>
+                    <div className="flex justify-between border-b pb-1"><span>人數</span> <span className="font-bold">{trip.participants.length} 人</span></div>
+                    <div className="flex justify-between pt-2">
+                      <span className="flex items-center gap-1"><Weight size={16}/> 預估重量</span> 
+                      <span className="font-bold text-blue-600">{estimate.totalWeight} kg</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-orange-50 p-6 rounded-lg border border-orange-100">
+                  <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Luggage size={20}/> 共用物品清單</h3>
+                  <ul className="list-disc pl-5 space-y-1">
+                    {trip.packingList?.shared?.map((item, i) => (
+                      <li key={i} className="text-sm">{item.name} <span className="text-gray-400">x{item.qty}</span></li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-6">
+                 {Object.entries(trip.packingList?.individual || {}).map(([uid, items]) => {
+                     const m = members.find(mem => mem.id === uid);
+                     if (!m) return null;
+                     return (
+                       <div key={uid} className="break-inside-avoid">
+                         <div className={`font-bold mb-2 px-2 py-1 rounded ${m.color}`}>{m.name}</div>
+                         <ul className="space-y-1">
+                           {items.map((item, i) => (
+                             <li key={i} className="flex items-center gap-2 text-sm border-b border-dashed border-gray-100 pb-1">
+                               <div className="w-4 h-4 border border-gray-300 rounded-sm"></div>
+                               <span className="flex-1">{item.name}</span>
+                               <span className="text-gray-400 text-xs">x{item.qty}</span>
+                             </li>
+                           ))}
+                         </ul>
+                       </div>
+                     );
+                  })}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const PackingMode = ({ trip }) => {
+     const estimate = getLuggageEstimate(trip);
+     const progress = calculatePackingProgress(trip.packingList);
+
+     return (
+       <div className="fixed inset-0 bg-white z-50 flex flex-col">
+         {/* Header */}
+         <div className="bg-blue-600 text-white p-4 flex justify-between items-center shadow-md">
+            <div>
+              <h2 className="text-xl font-bold flex items-center gap-2"><Briefcase/> 執行李模式: {trip.destination}</h2>
+              <div className="text-blue-100 text-sm mt-1">{trip.startDate} 出發 • 完成度 {progress}%</div>
+            </div>
+            <button onClick={() => setShowTripEditModal(false)} className="bg-blue-700 p-2 rounded hover:bg-blue-800"><X/></button>
+         </div>
+
+         <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
+            {/* Sidebar Stats */}
+            <div className="w-full md:w-80 bg-gray-50 p-6 border-r overflow-y-auto">
+               <div className="bg-white p-4 rounded-xl shadow-sm mb-6">
+                  <h3 className="text-gray-500 text-xs font-bold uppercase mb-2">AI 智能分析</h3>
+                  <div className="space-y-4">
+                     <div>
+                       <div className="flex justify-between text-sm mb-1"><span>預估總重</span> <span className="font-bold">{estimate.totalWeight} kg</span></div>
+                       <div className="w-full bg-gray-200 rounded-full h-2"><div className="bg-blue-500 h-2 rounded-full" style={{width: `${Math.min(estimate.totalWeight, 50)*2}%`}}></div></div>
+                     </div>
+                     <div className="bg-blue-50 p-3 rounded text-sm text-blue-800 border border-blue-100">
+                        <div className="font-bold mb-1 flex items-center gap-1"><Luggage size={14}/> 建議行李組合</div>
+                        {estimate.advice}
+                     </div>
+                  </div>
+               </div>
+               
+               {/* Transport & Accommodation Info */}
+               <div className="bg-white p-4 rounded-xl shadow-sm mb-6">
+                 <h3 className="text-gray-500 text-xs font-bold uppercase mb-4">行程資訊</h3>
+                 <div className="text-sm space-y-2">
+                   <div className="flex items-center gap-2"><Plane size={14} className="text-gray-400"/> {trip.arrivalType} ({trip.arrivalDetail})</div>
+                   <div className="flex items-center gap-2"><Car size={14} className="text-gray-400"/> 當地: {trip.localTransport}</div>
+                   <div className="flex items-center gap-2"><Hotel size={14} className="text-gray-400"/> {trip.hotelStar}星 {trip.hotelType}</div>
+                 </div>
+               </div>
+
+               <div className="bg-white p-4 rounded-xl shadow-sm">
+                 <h3 className="text-gray-500 text-xs font-bold uppercase mb-4">參與成員</h3>
+                 <div className="space-y-2">
+                   {trip.participants.map(pid => {
+                     const m = members.find(mem => mem.id === pid);
+                     if(!m) return null;
+                     return (
+                       <div key={pid} className="flex items-center gap-2">
+                         <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${m.color}`}>{m.name[0]}</div>
+                         <span className="text-sm">{m.name}</span>
+                       </div>
+                     )
+                   })}
+                 </div>
+               </div>
+            </div>
+
+            {/* Checklist */}
+            <div className="flex-1 overflow-y-auto p-6 md:p-10">
+               {/* Shared */}
+               <div className="mb-8">
+                  <h3 className="font-bold text-xl mb-4 text-orange-600 flex items-center gap-2"><BoxIcon/> 共用物品</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {trip.packingList?.shared?.map((item, i) => (
+                      <div key={i} 
+                           onClick={() => togglePackedItem(trip, 'shared', i)}
+                           className={`p-3 rounded border cursor-pointer flex items-center gap-3 transition-all ${item.packed ? 'bg-green-50 border-green-200 opacity-60' : 'bg-white hover:border-blue-300'}`}>
+                         {item.packed ? <CheckSquare className="text-green-500"/> : <Square className="text-gray-300"/>}
+                         <div className="flex-1">
+                           <div className={`font-medium ${item.packed ? 'line-through text-gray-500' : 'text-gray-800'}`}>{item.name}</div>
+                         </div>
+                         <span className="text-xs bg-gray-100 px-2 py-1 rounded">x{item.qty}</span>
+                      </div>
+                    ))}
+                  </div>
+               </div>
+
+               {/* Individual */}
+               {Object.entries(trip.packingList?.individual || {}).map(([uid, items]) => {
+                  const m = members.find(mem => mem.id === uid);
+                  if(!m) return null;
+                  return (
+                    <div key={uid} className="mb-8">
+                       <h3 className={`font-bold text-xl mb-4 flex items-center gap-2 p-2 rounded w-fit ${m.color}`}><User size={20}/> {m.name}</h3>
+                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                         {items.map((item, i) => (
+                           <div key={i} 
+                                onClick={() => togglePackedItem(trip, 'individual', i, uid)}
+                                className={`p-3 rounded border cursor-pointer flex items-center gap-3 transition-all ${item.packed ? 'bg-green-50 border-green-200 opacity-60' : 'bg-white hover:border-blue-300'}`}>
+                             {item.packed ? <CheckSquare className="text-green-500"/> : <Square className="text-gray-300"/>}
+                             <div className="flex-1">
+                               <div className={`font-medium ${item.packed ? 'line-through text-gray-500' : 'text-gray-800'}`}>{item.name}</div>
+                             </div>
+                             <span className="text-xs bg-gray-100 px-2 py-1 rounded">x{item.qty}</span>
+                           </div>
+                         ))}
+                       </div>
+                    </div>
+                  );
+               })}
+            </div>
+         </div>
+       </div>
+     );
+  };
+
+  const BoxIcon = () => (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
+  );
 
   // Main Render
   if (loading) return <div className="h-screen flex items-center justify-center">載入中...</div>;
