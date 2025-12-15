@@ -158,7 +158,9 @@ const getLunarInfo = (date) => {
   const special = LUNAR_DATA.find(d => d.day === day);
   if (special) return { dayText: special.text, auspicious: special.ausp };
   
-  const lunarDays = ["初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十", "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十", "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"];
+  const lunarDays = ["初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十", 
+                     "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十",
+                     "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"];
   const idx = (day - 1) % 30;
   const randAusp = (day % 5 === 0) ? '宜會友' : (day % 7 === 0 ? '忌遠行' : '');
   return { dayText: lunarDays[idx], auspicious: randAusp };
@@ -230,6 +232,7 @@ export default function App() {
   useEffect(() => {
     const initAuth = async () => {
       try {
+        // Try local persistence first, fallback to memory if blocked (e.g. in iframe)
         try { await setPersistence(auth, browserLocalPersistence); } catch (e) { await setPersistence(auth, inMemoryPersistence); }
         await signInAnonymously(auth);
       } catch (err) { setAuthError(err.message); setLoading(false); }
@@ -246,19 +249,34 @@ export default function App() {
     const unsubMembers = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'members')), (snap) => {
         const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         if (data.length === 0) {
-            DEFAULT_MEMBERS_SEED.forEach(async (m) => addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'members'), { ...m, createdAt: serverTimestamp() }));
+            DEFAULT_MEMBERS_SEED.forEach(async (m) => {
+                await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'members'), {
+                    ...m, createdAt: serverTimestamp()
+                });
+            });
         } else {
             setMembers(data);
         }
         setLoading(false);
     });
-    const unsubEvents = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'events')), (snap) => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const unsubExpenses = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses')), (snap) => {
+
+    const unsubEvents = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'events')), 
+      (snap) => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    );
+    
+    const unsubExpenses = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses')), 
+      (snap) => {
         const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         setExpenses(data);
-        if (data.length === 0) INITIAL_EXPENSES.forEach(e => addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses'), { ...e, createdAt: serverTimestamp() }));
-    });
-    const unsubTrips = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'trips')), (snap) => setTrips(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+        if (data.length === 0) {
+          INITIAL_EXPENSES.forEach(e => addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses'), { ...e, createdAt: serverTimestamp() }));
+        }
+      }
+    );
+
+    const unsubTrips = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'trips')), 
+      (snap) => setTrips(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    );
 
     return () => { unsubMembers(); unsubEvents(); unsubExpenses(); unsubTrips(); };
   }, [user]);
@@ -442,7 +460,6 @@ export default function App() {
           <div className="h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
              <div className="text-center mb-10">
                  <div className="w-24 h-24 mx-auto mb-4 rounded-3xl shadow-lg bg-blue-600 flex items-center justify-center text-white text-5xl font-bold overflow-hidden">
-                     {/* Safe fallback for logo */}
                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="w-16 h-16"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
                  </div>
                  <h1 className="text-3xl font-bold text-gray-800">Charles Family App</h1>
@@ -551,6 +568,258 @@ export default function App() {
       </>
   );
 
+  const renderCalendar = () => {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+
+    if (calendarView === 'year') {
+      const months = Array.from({length: 12}, (_, i) => i);
+      return (
+        <div className="bg-white rounded-lg shadow h-full flex flex-col">
+          {renderCalendarHeader()}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4 overflow-y-auto">
+            {months.map(m => (
+              <div key={m} className="border rounded p-2 hover:shadow-md cursor-pointer bg-white" onClick={() => { setCurrentDate(new Date(year, m, 1)); setCalendarView('month'); }}>
+                <div className="text-center font-bold mb-2 bg-gray-50 rounded py-1">{m+1}月</div>
+                <div className="grid grid-cols-7 gap-1 text-[8px] text-center text-gray-400">
+                  {['日','一','二','三','四','五','六'].map(d => <div key={d} className={d==='日'||d==='六'?'text-red-400':''}>{d}</div>)}
+                  {Array.from({length: new Date(year, m, 1).getDay()}).map((_, i) => <div key={`e-${i}`}></div>)}
+                  {Array.from({length: new Date(year, m+1, 0).getDate()}).map((_, i) => {
+                    const dStr = formatDate(new Date(year, m, i+1));
+                    const isHol = HK_HOLIDAYS[dStr];
+                    const hasTrip = trips.some(t => isDateInRange(dStr, t.startDate, t.endDate));
+                    return (
+                      <div key={i} className={`rounded-full h-5 w-5 flex items-center justify-center ${isHol ? 'bg-red-100 text-red-600 font-bold' : hasTrip ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100'}`}>
+                        {i+1}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+    if (calendarView === 'day') {
+      const hours = Array.from({length: 18}, (_, i) => i + 6); // 06:00 to 23:00
+      const dStr = formatDate(currentDate);
+      const dayEvents = events.filter(e => e.date === dStr);
+      return (
+        <div className="flex flex-col h-full bg-white rounded-lg shadow overflow-hidden">
+           {renderCalendarHeader()} 
+           <div className="p-4 border-b flex justify-between items-center bg-gray-50">
+             <h2 className="text-xl font-bold">{dStr} {HK_HOLIDAYS[dStr] ? `(${HK_HOLIDAYS[dStr]})` : ''}</h2>
+             <div className="text-sm text-gray-500">{getLunarInfo(currentDate).dayText} {getLunarInfo(currentDate).auspicious}</div>
+           </div>
+           <div className="flex-1 overflow-y-auto relative">
+             {hours.map(h => (
+               <div key={h} className="flex border-b h-24 relative group">
+                 <div className="w-20 text-right pr-4 py-2 text-sm text-gray-500 border-r bg-gray-50 flex-shrink-0">{h}:00</div>
+                 <div className="flex-1 relative p-1 hover:bg-blue-50/30 cursor-pointer" 
+                      onClick={() => { setSelectedDate(currentDate); setEditingItem({ startTime: `${h}:00` }); setShowEventModal(true); }}>
+                    {dayEvents.filter(e => parseInt(e.startTime) === h).map(ev => {
+                       const cat = categories.find(c => c.id === ev.type) || categories[0];
+                       return (
+                         <div key={ev.id} onClick={(e) => { e.stopPropagation(); setEditingItem(ev); setShowEventModal(true); }} className={`absolute left-2 right-2 rounded p-2 text-sm border-l-4 shadow-sm z-10 ${cat.color}`}>
+                           <div className="font-bold flex justify-between"><span>{ev.title}</span><span className="opacity-75">{ev.startTime}-{ev.endTime}</span></div>
+                         </div>
+                       );
+                    })}
+                 </div>
+               </div>
+             ))}
+           </div>
+        </div>
+      );
+    }
+    
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstDay = new Date(year, month, 1).getDay();
+    const days = [];
+    for (let i = 0; i < firstDay; i++) days.push(<div key={`empty-${i}`} className="h-28 bg-gray-50/30 border-r border-b"></div>);
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateObj = new Date(year, month, d);
+      const dateStr = formatDate(dateObj);
+      const isToday = formatDate(new Date()) === dateStr;
+      const holiday = HK_HOLIDAYS[dateStr];
+      const lunar = getLunarInfo(dateObj);
+      const dayEvents = events.filter(e => e.date === dateStr);
+      const activeTrips = trips.filter(t => isDateInRange(dateStr, t.startDate, t.endDate));
+      const dayExpenses = expenses.filter(e => (e.type === 'recurring_monthly' && e.day === d) || (e.type === 'recurring_yearly' && e.month === month + 1 && e.day === d));
+
+      days.push(
+        <div key={d} onClick={() => { setSelectedDate(dateObj); setEditingItem(null); openEventModal(); }} className={`h-28 border-r border-b p-1 relative hover:bg-blue-50 transition-colors ${isToday ? 'bg-blue-50' : 'bg-white'}`}>
+           <div className="flex justify-between items-start">
+             <span className={`text-sm font-semibold w-6 h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-blue-600 text-white' : 'text-gray-700'}`}>{d}</span>
+             <div className="flex flex-col items-end">
+               <span className="text-[10px] text-gray-400">{lunar.dayText}</span>
+               {lunar.auspicious && <span className="text-[9px] text-orange-500 scale-90 origin-right border border-orange-200 rounded px-0.5 bg-orange-50">{lunar.auspicious}</span>}
+               {holiday && <span className="text-[10px] text-red-500 font-bold">{holiday}</span>}
+             </div>
+           </div>
+           <div className="mt-1 flex flex-col gap-0.5 overflow-hidden h-[calc(100%-24px)]">
+             {activeTrips.map(t => (<div key={t.id} className="text-[9px] text-white px-1 truncate rounded-sm bg-blue-400 flex items-center"><Plane size={8} className="mr-1"/> {t.destination}</div>))}
+             {dayExpenses.length > 0 && (<div className="text-[9px] bg-orange-50 text-orange-700 px-1 rounded border border-orange-100 flex items-center gap-1"><CreditCard size={8}/> ${dayExpenses.reduce((a,b)=>a+Number(b.amount||0),0).toLocaleString()}</div>)}
+             {dayEvents.slice(0, 3).map(ev => {
+               const cat = categories.find(c => c.id === ev.type) || categories[0];
+               return (<div key={ev.id} onMouseEnter={(e) => setHoveredEvent({ event: ev, x: e.clientX, y: e.clientY })} onMouseLeave={() => setHoveredEvent(null)} onClick={(e) => { e.stopPropagation(); openEventModal(ev); }} className={`text-[9px] px-1 rounded truncate border ${cat.color} cursor-help`}>{ev.title}</div>);
+             })}
+           </div>
+        </div>
+      );
+    }
+    return (
+      <div className="bg-white rounded-lg shadow h-full flex flex-col">
+        {renderCalendarHeader()}
+        <div className="grid grid-cols-7 border-b bg-gray-50 text-center py-1 text-sm text-gray-500"><div>日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div></div>
+        <div className="grid grid-cols-7 flex-1 overflow-y-auto">{days}</div>
+        <Tooltip/>
+      </div>
+    );
+  };
+
+  const renderExpenses = () => {
+     const currentMonthIndex = new Date().getMonth(); 
+     const currentYear = new Date().getFullYear();
+     const currentMonthKey = `paid_${currentYear}_${currentMonthIndex}`;
+     
+     const monthlyExpenses = expenses.filter(e => {
+       if (e.type === 'recurring_monthly') return true;
+       if (e.type === 'recurring_yearly' && e.month === (currentMonthIndex + 1)) return true;
+       return false;
+     });
+
+     const totalBudget = monthlyExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+     const paidAmount = monthlyExpenses.reduce((sum, e) => {
+        const isPaid = (e.paidMonths || []).includes(currentMonthKey);
+        return sum + (isPaid ? (e.amount || 0) : 0);
+     }, 0);
+     const unpaidAmount = totalBudget - paidAmount;
+
+     const grouped = {
+        '樓宇': { icon: Home, color: 'text-blue-600', bg: 'bg-blue-50', border: 'border-blue-200', items: [] },
+        '信用卡': { icon: CreditCard, color: 'text-purple-600', bg: 'bg-purple-50', border: 'border-purple-200', items: [] },
+        '保險': { icon: Shield, color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-200', items: [] },
+        '日常': { icon: Zap, color: 'text-orange-600', bg: 'bg-orange-50', border: 'border-orange-200', items: [] },
+        '貸款': { icon: DollarSign, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200', items: [] },
+        '其他': { icon: Info, color: 'text-gray-600', bg: 'bg-gray-50', border: 'border-gray-200', items: [] }
+     };
+
+     expenses.forEach(e => {
+        const cat = Object.keys(grouped).find(k => e.category.includes(k)) || '其他';
+        grouped[cat].items.push(e);
+     });
+
+     return (
+        <div className="bg-white rounded-lg shadow h-full overflow-y-auto p-6">
+           <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold flex items-center gap-2"><CreditCard/> 家庭開支</h2>
+              <button onClick={() => openExpenseModal()} className="bg-blue-600 text-white px-4 py-2 rounded flex items-center gap-2 shadow hover:bg-blue-700 transition"><Plus size={16}/> 新增</button>
+           </div>
+           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 shadow-sm flex flex-col"><span className="text-xs text-blue-500 font-bold uppercase mb-1 flex items-center gap-1"><PieChart size={12}/> 本月總預算</span><span className="text-2xl font-bold text-blue-900">{formatMoney(totalBudget)}</span></div>
+              <div className="bg-green-50 border border-green-100 rounded-xl p-4 shadow-sm flex flex-col"><span className="text-xs text-green-500 font-bold uppercase mb-1 flex items-center gap-1"><CheckSquare size={12}/> 已付金額</span><span className="text-2xl font-bold text-green-700">{formatMoney(paidAmount)}</span></div>
+              <div className="bg-red-50 border border-red-100 rounded-xl p-4 shadow-sm flex flex-col"><span className="text-xs text-red-500 font-bold uppercase mb-1 flex items-center gap-1"><Wallet size={12}/> 待付金額</span><span className="text-2xl font-bold text-red-600">{formatMoney(unpaidAmount)}</span></div>
+           </div>
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {Object.entries(grouped).map(([key, group]) => {
+                 if (group.items.length === 0) return null;
+                 const paidCount = group.items.filter(i => (i.paidMonths||[]).includes(currentMonthKey)).length;
+                 const progress = Math.round((paidCount / group.items.length) * 100);
+                 return (
+                    <div key={key} className={`rounded-xl border ${group.border} overflow-hidden shadow-sm hover:shadow-md transition-shadow`}>
+                       <div className={`p-4 ${group.bg} flex justify-between items-center border-b ${group.border}`}>
+                          <h3 className={`font-bold text-lg flex items-center gap-2 ${group.color}`}><group.icon size={20}/> {key}</h3>
+                          <div className="text-xs font-bold bg-white px-2 py-1 rounded shadow-sm">{paidCount}/{group.items.length} 已付</div>
+                       </div>
+                       <div className="h-1 w-full bg-gray-100"><div className={`h-1 transition-all duration-500 ${group.color.replace('text','bg')}`} style={{width: `${progress}%`}}></div></div>
+                       <div className="p-2">
+                          {group.items.map(item => {
+                             const isPaid = (item.paidMonths || []).includes(currentMonthKey);
+                             return (
+                                <div key={item.id} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg group">
+                                   <div className="flex items-center gap-3">
+                                      <button onClick={() => handleToggleExpensePaid(item.id)} className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isPaid ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 hover:border-green-500'}`}>{isPaid && <Check size={12}/>}</button>
+                                      <div><div className={`font-medium text-sm ${isPaid ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{item.name}</div><div className="text-xs text-gray-500 flex items-center gap-2"><span>{item.day}號</span></div></div>
+                                   </div>
+                                   <div className="text-right"><div className="font-mono font-bold text-sm">{formatMoney(item.amount)}</div><div className="flex gap-2 justify-end opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => openExpenseModal(item)} className="text-blue-500 hover:text-blue-700"><Edit2 size={12}/></button><button onClick={() => deleteItem('expenses', item.id)} className="text-gray-400 hover:text-red-500"><Trash2 size={12}/></button></div></div>
+                                </div>
+                             )
+                          })}
+                       </div>
+                    </div>
+                 );
+              })}
+           </div>
+        </div>
+     );
+  };
+
+  const renderSettings = () => (
+    <div className="max-w-3xl mx-auto bg-white rounded-lg shadow p-8 overflow-y-auto">
+      <h2 className="text-2xl font-bold mb-8 flex items-center gap-2"><Settings/> 系統設定</h2>
+      <section className="mb-8">
+        <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">當前登入</h3>
+        <div className="flex items-center justify-between bg-blue-50 p-4 rounded-xl border border-blue-100">
+           <div className="flex items-center gap-3">
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold ${currentUserRole.color}`}>{currentUserRole.name[0]}</div>
+              <div><div className="font-bold text-gray-800">{currentUserRole.name}</div><div className="text-xs text-gray-500">{currentUserRole.role === 'admin' ? '管理員' : '一般成員'}</div></div>
+           </div>
+           <button onClick={handleLogout} className="flex items-center gap-2 text-red-500 hover:text-red-700 text-sm font-bold bg-white px-4 py-2 rounded shadow-sm"><LogOut size={16}/> 登出</button>
+        </div>
+      </section>
+      <section className="mb-8">
+        <div className="flex justify-between items-center mb-4 border-b pb-2"><h3 className="font-bold text-gray-700">家庭成員管理</h3>{currentUserRole.role === 'admin' && (<button onClick={() => setShowAddMemberModal(true)} className="text-sm bg-blue-600 text-white px-3 py-1 rounded flex items-center gap-1 hover:bg-blue-700"><Plus size={14}/> 新增成員</button>)}</div>
+        <div className="space-y-2">
+          {members.map(m => (
+             <div key={m.id} className="flex items-center justify-between p-3 bg-gray-50 rounded">
+                <div className="flex items-center gap-3"><div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${m.color}`}>{m.name[0]}</div><div><div className="font-bold text-gray-800">{m.name}</div><div className="text-xs text-gray-500">{m.role === 'admin' ? '管理員' : '一般成員'}</div></div></div>
+                {currentUserRole.role === 'admin' && (<div className="flex gap-2"><button onClick={() => { setTargetMemberId(m.id); setShowChangePasswordModal(true); }} className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded text-gray-600 hover:bg-gray-100 flex items-center gap-1"><Key size={12}/> 重設密碼</button></div>)}
+             </div>
+          ))}
+        </div>
+      </section>
+      <section className="mb-8">
+        <div className="flex justify-between items-center mb-4 border-b pb-2"><h3 className="font-bold text-gray-700">日曆項目分類 (Highlight)</h3><button onClick={() => handleUpdateCategory({ name: '新分類', color: 'bg-gray-100 text-gray-800 border-gray-200' })} className="text-sm text-blue-600 flex items-center gap-1"><Plus size={14}/> 新增</button></div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+           {categories.map(c => (
+             <div key={c.id} className={`p-3 rounded border flex justify-between items-center ${c.color}`}>
+               <input value={c.name} disabled={c.type === 'system'} onChange={(e) => handleUpdateCategory({...c, name: e.target.value})} className="bg-transparent outline-none font-bold w-full"/>
+               {c.type === 'custom' && (<div className="flex items-center gap-2"><button className="text-gray-400 hover:text-red-500" onClick={() => setCategories(categories.filter(x => x.id !== c.id))}><Trash2 size={14}/></button></div>)}
+             </div>
+           ))}
+        </div>
+      </section>
+    </div>
+  );
+
+  const renderTravel = () => {
+    return (
+      <div className="space-y-6">
+         <div className="flex justify-between items-center">
+           <h2 className="text-2xl font-bold flex items-center gap-2"><Plane/> 旅行計劃</h2>
+           <button onClick={openTripWizard} className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 flex items-center gap-2"><Plus size={16}/> 新行程</button>
+         </div>
+         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+           {trips.map(trip => (
+             <div key={trip.id} className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100 flex flex-col">
+                <div className="p-5 border-b bg-gradient-to-r from-blue-50 to-white flex justify-between items-start">
+                   <div><h3 className="text-xl font-bold text-gray-800 flex items-center gap-2"><MapPin size={20} className="text-red-500"/> {trip.destination}</h3><div className="text-sm text-gray-500 mt-1">{trip.startDate} - {trip.endDate} ({getDaysDiff(trip.startDate, trip.endDate)}天)</div></div>
+                   <div className="flex gap-2"><button onClick={() => setShowPrintPreview({ trip })} className="p-2 bg-white border rounded hover:bg-gray-50 text-gray-600" title="列印報告"><Printer size={16}/></button></div>
+                </div>
+                <div className="p-5 flex-1 bg-gray-50/50">
+                   <div className="flex justify-between items-center mb-4"><span className="font-bold text-gray-700 flex items-center gap-2"><Luggage size={16}/> 行李進度</span><span className="text-xs font-bold bg-green-100 text-green-700 px-2 py-1 rounded">{calculatePackingProgress(trip.packingList)}%</span></div>
+                   <div className="w-full bg-gray-200 rounded-full h-2 mb-4"><div className="bg-green-500 h-2 rounded-full transition-all duration-500" style={{width: `${calculatePackingProgress(trip.packingList)}%`}}></div></div>
+                   <button onClick={() => { setEditingItem(trip); setShowTripEditModal(true); }} className="w-full py-2 bg-white border border-blue-200 text-blue-600 rounded font-medium hover:bg-blue-50 shadow-sm">開始執行李 / 編輯清單</button>
+                </div>
+             </div>
+           ))}
+         </div>
+      </div>
+    );
+  };
+
   // Main Render
   if (loading) return <div className="h-screen flex items-center justify-center">載入中...</div>;
   if (authError) return (
@@ -598,29 +867,7 @@ export default function App() {
         <main className="flex-1 overflow-y-auto p-2 md:p-6 bg-gray-50">
           {activeTab === 'calendar' && renderCalendar()}
           {activeTab === 'expenses' && renderExpenses()}
-          {activeTab === 'travel' && (
-            <div className="space-y-6">
-               <div className="flex justify-between items-center">
-                 <h2 className="text-2xl font-bold flex items-center gap-2"><Plane/> 旅行計劃</h2>
-                 <button onClick={openTripWizard} className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700 flex items-center gap-2"><Plus size={16}/> 新行程</button>
-               </div>
-               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                 {trips.map(trip => (
-                   <div key={trip.id} className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100 flex flex-col">
-                      <div className="p-5 border-b bg-gradient-to-r from-blue-50 to-white flex justify-between items-start">
-                         <div><h3 className="text-xl font-bold text-gray-800 flex items-center gap-2"><MapPin size={20} className="text-red-500"/> {trip.destination}</h3><div className="text-sm text-gray-500 mt-1">{trip.startDate} - {trip.endDate} ({getDaysDiff(trip.startDate, trip.endDate)}天)</div></div>
-                         <div className="flex gap-2"><button onClick={() => setShowPrintPreview({ trip })} className="p-2 bg-white border rounded hover:bg-gray-50 text-gray-600" title="列印報告"><Printer size={16}/></button></div>
-                      </div>
-                      <div className="p-5 flex-1 bg-gray-50/50">
-                         <div className="flex justify-between items-center mb-4"><span className="font-bold text-gray-700 flex items-center gap-2"><Luggage size={16}/> 行李進度</span><span className="text-xs font-bold bg-green-100 text-green-700 px-2 py-1 rounded">{calculatePackingProgress(trip.packingList)}%</span></div>
-                         <div className="w-full bg-gray-200 rounded-full h-2 mb-4"><div className="bg-green-500 h-2 rounded-full transition-all duration-500" style={{width: `${calculatePackingProgress(trip.packingList)}%`}}></div></div>
-                         <button onClick={() => { setEditingItem(trip); setShowTripEditModal(true); }} className="w-full py-2 bg-white border border-blue-200 text-blue-600 rounded font-medium hover:bg-blue-50 shadow-sm">開始執行李 / 編輯清單</button>
-                      </div>
-                   </div>
-                 ))}
-               </div>
-            </div>
-          )}
+          {activeTab === 'travel' && renderTravel()}
           {activeTab === 'settings' && renderSettings()}
         </main>
 
