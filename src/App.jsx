@@ -4,7 +4,10 @@ import {
   getAuth, 
   signInAnonymously, 
   onAuthStateChanged,
-  signInWithCustomToken
+  signInWithCustomToken,
+  setPersistence,        // 新增：設定持久化模式
+  inMemoryPersistence,   // 新增：記憶體模式 (修復 iframe 錯誤用)
+  browserLocalPersistence // 新增：本地模式 (正常情況用)
 } from 'firebase/auth';
 import { 
   getFirestore, 
@@ -81,7 +84,7 @@ let app;
 try {
   app = initializeApp(firebaseConfig);
 } catch (e) {
-  // Ignore duplicate app initialization error
+  // Ignore duplicate app initialization error (safeguard for hot-reload)
 }
 
 const auth = getAuth(app);
@@ -234,6 +237,15 @@ export default function App() {
   useEffect(() => {
     const initAuth = async () => {
       try {
+        // --- FIX FOR "Access to storage is not allowed" ---
+        // Attempt to set persistence to LOCAL (best case), fall back to MEMORY (iframe case)
+        try {
+            await setPersistence(auth, browserLocalPersistence);
+        } catch (storageErr) {
+            console.warn("Storage access blocked (iframe?), using in-memory persistence.", storageErr);
+            await setPersistence(auth, inMemoryPersistence);
+        }
+        
         await signInAnonymously(auth);
       } catch (err) {
         console.error("Auth Error:", err);
