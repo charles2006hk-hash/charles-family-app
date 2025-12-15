@@ -64,7 +64,7 @@ import {
 } from 'lucide-react';
 
 // --- 1. Firebase Initialization (Direct Config) ---
-// 修正：直接填入您的 Firebase 設定，不再讀取 __firebase_config 變數
+
 const firebaseConfig = {
   apiKey: "AIzaSyCSX2xjZB7zqKvW9_ao007doKchwTCxGVs",
   authDomain: "charles-family-app.firebaseapp.com",
@@ -86,7 +86,6 @@ try {
 
 const auth = getAuth(app);
 const db = getFirestore(app);
-// 修正：直接設定 appId，確保資料庫路徑一致
 const appId = 'charles-family-app';
 
 // --- Constants & Data ---
@@ -203,15 +202,39 @@ export default function App() {
   const [showPrintPreview, setShowPrintPreview] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
 
+  // --- FORCE STYLE INJECTION ---
+  useEffect(() => {
+    // 1. Inject Tailwind CDN script
+    const script = document.createElement('script');
+    script.src = "https://cdn.tailwindcss.com";
+    script.async = true;
+    document.head.appendChild(script);
+
+    // 2. Fallback: Inject Static CSS link (in case script is blocked)
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css';
+    document.head.appendChild(link);
+
+    // 3. Fallback: Inject basic styles for layout (Grid/Flex)
+    const style = document.createElement('style');
+    style.innerHTML = `
+      body { font-family: system-ui, -apple-system, sans-serif; background: #f3f4f6; }
+      .flex { display: flex; }
+      .flex-col { flex-direction: column; }
+      .h-screen { height: 100vh; }
+      .w-full { width: 100%; }
+      .hidden { display: none; }
+      @media (min-width: 768px) { .md\\:flex { display: flex; } .md\\:hidden { display: none; } }
+    `;
+    document.head.appendChild(style);
+  }, []);
+
   // Auth & Sync
   useEffect(() => {
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
+        await signInAnonymously(auth);
       } catch (err) {
         console.error("Auth Error:", err);
         setAuthError(err.message);
