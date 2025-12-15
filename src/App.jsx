@@ -442,7 +442,7 @@ export default function App() {
     );
   };
 
-  // --- RENDER FUNCTIONS (Instead of Components to fix focus loss) ---
+  // --- RENDER FUNCTIONS ---
 
   const renderLoginScreen = () => {
       if (loginTargetMember) {
@@ -477,7 +477,11 @@ export default function App() {
       return (
           <div className="h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
              <div className="text-center mb-10">
-                 <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center text-white text-3xl font-bold mx-auto mb-4">C</div>
+                 {/* App Logo Image Placeholder */}
+                 <div className="w-24 h-24 mx-auto mb-4 rounded-3xl shadow-lg overflow-hidden bg-white">
+                     <img src="/app-icon.png" alt="Charles Family" className="w-full h-full object-cover" onError={(e)=>{e.target.style.display='none';}}/>
+                     <div className="w-full h-full flex items-center justify-center text-blue-600 text-4xl font-bold" style={{display: 'none'}}>C</div>
+                 </div>
                  <h1 className="text-3xl font-bold text-gray-800">Charles Family App</h1>
                  <p className="text-gray-500">請選擇您的身分登入</p>
              </div>
@@ -517,7 +521,6 @@ export default function App() {
               </div>
             </div>
             <div className="p-10 bg-white text-gray-800 print:p-0">
-               {/* Print Content - same as before */}
                <div className="border-b-2 border-blue-600 pb-4 mb-8 flex justify-between items-end">
                   <div>
                     <h1 className="text-3xl font-bold text-blue-900 mb-2">旅行行程與執行李報告</h1>
@@ -528,6 +531,7 @@ export default function App() {
                     <div className="text-gray-600">{trip.startDate} 至 {trip.endDate}</div>
                   </div>
                 </div>
+                {/* Details Grid */}
                 <div className="grid grid-cols-2 gap-8 mb-8">
                 <div className="bg-gray-50 p-6 rounded-lg border">
                   <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Info size={20}/> 行程概覽</h3>
@@ -632,11 +636,17 @@ export default function App() {
         </div>
       );
     }
+    // ... (rest of calendar view logic remains same)
+    // For brevity, inserting day/month views
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstDay = new Date(year, month, 1).getDay();
+    const days = [];
     if (calendarView === 'day') {
-      const hours = Array.from({length: 18}, (_, i) => i + 6); // 06:00 to 23:00
-      const dStr = formatDate(currentDate);
-      const dayEvents = events.filter(e => e.date === dStr);
-      return (
+       // ... day view logic
+       const hours = Array.from({length: 18}, (_, i) => i + 6);
+       const dStr = formatDate(currentDate);
+       const dayEvents = events.filter(e => e.date === dStr);
+       return (
         <div className="flex flex-col h-full bg-white rounded-lg shadow overflow-hidden">
            {renderCalendarHeader()} 
            <div className="p-4 border-b flex justify-between items-center bg-gray-50">
@@ -652,13 +662,8 @@ export default function App() {
                     {dayEvents.filter(e => parseInt(e.startTime) === h).map(ev => {
                        const cat = categories.find(c => c.id === ev.type) || categories[0];
                        return (
-                         <div key={ev.id} 
-                              onClick={(e) => { e.stopPropagation(); setEditingItem(ev); setShowEventModal(true); }}
-                              className={`absolute left-2 right-2 rounded p-2 text-sm border-l-4 shadow-sm z-10 ${cat.color}`}>
-                           <div className="font-bold flex justify-between">
-                             <span>{ev.title}</span>
-                             <span className="opacity-75">{ev.startTime}-{ev.endTime}</span>
-                           </div>
+                         <div key={ev.id} onClick={(e) => { e.stopPropagation(); setEditingItem(ev); setShowEventModal(true); }} className={`absolute left-2 right-2 rounded p-2 text-sm border-l-4 shadow-sm z-10 ${cat.color}`}>
+                           <div className="font-bold flex justify-between"><span>{ev.title}</span><span className="opacity-75">{ev.startTime}-{ev.endTime}</span></div>
                          </div>
                        );
                     })}
@@ -667,15 +672,11 @@ export default function App() {
              ))}
            </div>
         </div>
-      );
+       );
     }
-
-    // Month View (Default)
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const firstDay = new Date(year, month, 1).getDay();
-    const days = [];
+    
+    // Month View Render
     for (let i = 0; i < firstDay; i++) days.push(<div key={`empty-${i}`} className="h-28 bg-gray-50/30 border-r border-b"></div>);
-
     for (let d = 1; d <= daysInMonth; d++) {
       const dateObj = new Date(year, month, d);
       const dateStr = formatDate(dateObj);
@@ -687,9 +688,7 @@ export default function App() {
       const dayExpenses = expenses.filter(e => (e.type === 'recurring_monthly' && e.day === d) || (e.type === 'recurring_yearly' && e.month === month + 1 && e.day === d));
 
       days.push(
-        <div key={d} 
-             onClick={() => { setSelectedDate(dateObj); setEditingItem(null); setShowEventModal(true); }}
-             className={`h-28 border-r border-b p-1 relative hover:bg-blue-50 transition-colors ${isToday ? 'bg-blue-50' : 'bg-white'}`}>
+        <div key={d} onClick={() => { setSelectedDate(dateObj); setEditingItem(null); setShowEventModal(true); }} className={`h-28 border-r border-b p-1 relative hover:bg-blue-50 transition-colors ${isToday ? 'bg-blue-50' : 'bg-white'}`}>
            <div className="flex justify-between items-start">
              <span className={`text-sm font-semibold w-6 h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-blue-600 text-white' : 'text-gray-700'}`}>{d}</span>
              <div className="flex flex-col items-end">
@@ -699,38 +698,20 @@ export default function App() {
              </div>
            </div>
            <div className="mt-1 flex flex-col gap-0.5 overflow-hidden h-[calc(100%-24px)]">
-             {activeTrips.map(t => (
-               <div key={t.id} className="text-[9px] text-white px-1 truncate rounded-sm bg-blue-400 flex items-center">
-                 <Plane size={8} className="mr-1"/> {t.destination}
-               </div>
-             ))}
-             {dayExpenses.length > 0 && (
-               <div className="text-[9px] bg-orange-50 text-orange-700 px-1 rounded border border-orange-100 flex items-center gap-1">
-                 <CreditCard size={8}/> ${dayExpenses.reduce((a,b)=>a+Number(b.amount||0),0).toLocaleString()}
-               </div>
-             )}
+             {activeTrips.map(t => (<div key={t.id} className="text-[9px] text-white px-1 truncate rounded-sm bg-blue-400 flex items-center"><Plane size={8} className="mr-1"/> {t.destination}</div>))}
+             {dayExpenses.length > 0 && (<div className="text-[9px] bg-orange-50 text-orange-700 px-1 rounded border border-orange-100 flex items-center gap-1"><CreditCard size={8}/> ${dayExpenses.reduce((a,b)=>a+Number(b.amount||0),0).toLocaleString()}</div>)}
              {dayEvents.slice(0, 3).map(ev => {
                const cat = categories.find(c => c.id === ev.type) || categories[0];
-               return (
-                 <div key={ev.id} 
-                      onMouseEnter={(e) => setHoveredEvent({ event: ev, x: e.clientX, y: e.clientY })}
-                      onMouseLeave={() => setHoveredEvent(null)}
-                      className={`text-[9px] px-1 rounded truncate border ${cat.color} cursor-help`}>
-                   {ev.title}
-                 </div>
-               );
+               return (<div key={ev.id} onMouseEnter={(e) => setHoveredEvent({ event: ev, x: e.clientX, y: e.clientY })} onMouseLeave={() => setHoveredEvent(null)} className={`text-[9px] px-1 rounded truncate border ${cat.color} cursor-help`}>{ev.title}</div>);
              })}
            </div>
         </div>
       );
     }
-
     return (
       <div className="bg-white rounded-lg shadow h-full flex flex-col">
         {renderCalendarHeader()}
-        <div className="grid grid-cols-7 border-b bg-gray-50 text-center py-1 text-sm text-gray-500">
-          <div>日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div>
-        </div>
+        <div className="grid grid-cols-7 border-b bg-gray-50 text-center py-1 text-sm text-gray-500"><div>日</div><div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div></div>
         <div className="grid grid-cols-7 flex-1 overflow-y-auto">{days}</div>
         <Tooltip/>
       </div>
@@ -738,7 +719,7 @@ export default function App() {
   };
 
   const renderExpenses = () => {
-     const currentMonthIndex = new Date().getMonth(); // 0-11
+     const currentMonthIndex = new Date().getMonth(); 
      const currentYear = new Date().getFullYear();
      const currentMonthKey = `paid_${currentYear}_${currentMonthIndex}`;
      
@@ -775,76 +756,33 @@ export default function App() {
               <h2 className="text-2xl font-bold flex items-center gap-2"><CreditCard/> 家庭開支</h2>
               <button onClick={() => setShowExpenseModal(true)} className="bg-blue-600 text-white px-4 py-2 rounded flex items-center gap-2 shadow hover:bg-blue-700 transition"><Plus size={16}/> 新增</button>
            </div>
-
            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 shadow-sm flex flex-col">
-                 <span className="text-xs text-blue-500 font-bold uppercase mb-1 flex items-center gap-1"><PieChart size={12}/> 本月總預算</span>
-                 <span className="text-2xl font-bold text-blue-900">{formatMoney(totalBudget)}</span>
-                 <span className="text-xs text-blue-400 mt-1">{currentYear}年 {currentMonthIndex+1}月</span>
-              </div>
-              <div className="bg-green-50 border border-green-100 rounded-xl p-4 shadow-sm flex flex-col">
-                 <span className="text-xs text-green-500 font-bold uppercase mb-1 flex items-center gap-1"><CheckSquare size={12}/> 已付金額</span>
-                 <span className="text-2xl font-bold text-green-700">{formatMoney(paidAmount)}</span>
-                 <div className="w-full bg-green-200 h-1.5 rounded-full mt-2 overflow-hidden">
-                    <div className="bg-green-500 h-full transition-all" style={{width: `${totalBudget ? (paidAmount/totalBudget)*100 : 0}%`}}></div>
-                 </div>
-              </div>
-              <div className="bg-red-50 border border-red-100 rounded-xl p-4 shadow-sm flex flex-col">
-                 <span className="text-xs text-red-500 font-bold uppercase mb-1 flex items-center gap-1"><Wallet size={12}/> 待付金額</span>
-                 <span className="text-2xl font-bold text-red-600">{formatMoney(unpaidAmount)}</span>
-                 <span className="text-xs text-red-400 mt-1">{monthlyExpenses.length} 筆項目待處理</span>
-              </div>
+              <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 shadow-sm flex flex-col"><span className="text-xs text-blue-500 font-bold uppercase mb-1 flex items-center gap-1"><PieChart size={12}/> 本月總預算</span><span className="text-2xl font-bold text-blue-900">{formatMoney(totalBudget)}</span></div>
+              <div className="bg-green-50 border border-green-100 rounded-xl p-4 shadow-sm flex flex-col"><span className="text-xs text-green-500 font-bold uppercase mb-1 flex items-center gap-1"><CheckSquare size={12}/> 已付金額</span><span className="text-2xl font-bold text-green-700">{formatMoney(paidAmount)}</span></div>
+              <div className="bg-red-50 border border-red-100 rounded-xl p-4 shadow-sm flex flex-col"><span className="text-xs text-red-500 font-bold uppercase mb-1 flex items-center gap-1"><Wallet size={12}/> 待付金額</span><span className="text-2xl font-bold text-red-600">{formatMoney(unpaidAmount)}</span></div>
            </div>
-           
            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {Object.entries(grouped).map(([key, group]) => {
                  if (group.items.length === 0) return null;
                  const paidCount = group.items.filter(i => (i.paidMonths||[]).includes(currentMonthKey)).length;
                  const progress = Math.round((paidCount / group.items.length) * 100);
-
                  return (
                     <div key={key} className={`rounded-xl border ${group.border} overflow-hidden shadow-sm hover:shadow-md transition-shadow`}>
                        <div className={`p-4 ${group.bg} flex justify-between items-center border-b ${group.border}`}>
-                          <h3 className={`font-bold text-lg flex items-center gap-2 ${group.color}`}>
-                             <group.icon size={20}/> {key}
-                          </h3>
-                          <div className="text-xs font-bold bg-white px-2 py-1 rounded shadow-sm">
-                             {paidCount}/{group.items.length} 已付
-                          </div>
+                          <h3 className={`font-bold text-lg flex items-center gap-2 ${group.color}`}><group.icon size={20}/> {key}</h3>
+                          <div className="text-xs font-bold bg-white px-2 py-1 rounded shadow-sm">{paidCount}/{group.items.length} 已付</div>
                        </div>
-                       <div className="h-1 w-full bg-gray-100">
-                          <div className={`h-1 transition-all duration-500 ${group.color.replace('text','bg')}`} style={{width: `${progress}%`}}></div>
-                       </div>
+                       <div className="h-1 w-full bg-gray-100"><div className={`h-1 transition-all duration-500 ${group.color.replace('text','bg')}`} style={{width: `${progress}%`}}></div></div>
                        <div className="p-2">
                           {group.items.map(item => {
                              const isPaid = (item.paidMonths || []).includes(currentMonthKey);
                              return (
                                 <div key={item.id} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg group">
                                    <div className="flex items-center gap-3">
-                                      <button 
-                                        onClick={() => handleToggleExpensePaid(item.id)}
-                                        className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isPaid ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 hover:border-green-500'}`}
-                                      >
-                                        {isPaid && <Check size={12}/>}
-                                      </button>
-                                      <div>
-                                         <div className={`font-medium text-sm ${isPaid ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
-                                            {item.name}
-                                            {item.type === 'recurring_yearly' && <span className="ml-2 text-[10px] bg-blue-100 text-blue-700 px-1 rounded">年繳</span>}
-                                         </div>
-                                         <div className="text-xs text-gray-500 flex items-center gap-2">
-                                            <span>{item.type === 'recurring_yearly' ? `${item.month}月` : ''}{item.day}號</span>
-                                            {item.bank && <span>• {item.bank}</span>}
-                                         </div>
-                                      </div>
+                                      <button onClick={() => handleToggleExpensePaid(item.id)} className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${isPaid ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 hover:border-green-500'}`}>{isPaid && <Check size={12}/>}</button>
+                                      <div><div className={`font-medium text-sm ${isPaid ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{item.name}</div><div className="text-xs text-gray-500 flex items-center gap-2"><span>{item.day}號</span></div></div>
                                    </div>
-                                   <div className="text-right">
-                                      <div className="font-mono font-bold text-sm">{formatMoney(item.amount)}</div>
-                                      <div className="flex gap-2 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                                         <button onClick={() => { setEditingItem(item); setShowExpenseModal(true); }} className="text-blue-500 hover:text-blue-700"><Edit2 size={12}/></button>
-                                         <button onClick={() => deleteItem('expenses', item.id)} className="text-gray-400 hover:text-red-500"><Trash2 size={12}/></button>
-                                      </div>
-                                   </div>
+                                   <div className="text-right"><div className="font-mono font-bold text-sm">{formatMoney(item.amount)}</div><div className="flex gap-2 justify-end opacity-0 group-hover:opacity-100 transition-opacity"><button onClick={() => { setEditingItem(item); setShowExpenseModal(true); }} className="text-blue-500 hover:text-blue-700"><Edit2 size={12}/></button><button onClick={() => deleteItem('expenses', item.id)} className="text-gray-400 hover:text-red-500"><Trash2 size={12}/></button></div></div>
                                 </div>
                              )
                           })}
@@ -864,289 +802,36 @@ export default function App() {
         <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">當前登入</h3>
         <div className="flex items-center justify-between bg-blue-50 p-4 rounded-xl border border-blue-100">
            <div className="flex items-center gap-3">
-              <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold ${currentUserRole.color}`}>
-                 {currentUserRole.name[0]}
-              </div>
-              <div>
-                 <div className="font-bold text-gray-800">{currentUserRole.name}</div>
-                 <div className="text-xs text-gray-500">{currentUserRole.role === 'admin' ? '管理員' : '一般成員'}</div>
-              </div>
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold ${currentUserRole.color}`}>{currentUserRole.name[0]}</div>
+              <div><div className="font-bold text-gray-800">{currentUserRole.name}</div><div className="text-xs text-gray-500">{currentUserRole.role === 'admin' ? '管理員' : '一般成員'}</div></div>
            </div>
-           <button onClick={handleLogout} className="flex items-center gap-2 text-red-500 hover:text-red-700 text-sm font-bold bg-white px-4 py-2 rounded shadow-sm">
-              <LogOut size={16}/> 登出
-           </button>
+           <button onClick={handleLogout} className="flex items-center gap-2 text-red-500 hover:text-red-700 text-sm font-bold bg-white px-4 py-2 rounded shadow-sm"><LogOut size={16}/> 登出</button>
         </div>
       </section>
       <section className="mb-8">
-        <div className="flex justify-between items-center mb-4 border-b pb-2">
-           <h3 className="font-bold text-gray-700">家庭成員管理</h3>
-           {currentUserRole.role === 'admin' && (
-             <button onClick={() => setShowAddMemberModal(true)} className="text-sm bg-blue-600 text-white px-3 py-1 rounded flex items-center gap-1 hover:bg-blue-700"><Plus size={14}/> 新增成員</button>
-           )}
-        </div>
+        <div className="flex justify-between items-center mb-4 border-b pb-2"><h3 className="font-bold text-gray-700">家庭成員管理</h3>{currentUserRole.role === 'admin' && (<button onClick={() => setShowAddMemberModal(true)} className="text-sm bg-blue-600 text-white px-3 py-1 rounded flex items-center gap-1 hover:bg-blue-700"><Plus size={14}/> 新增成員</button>)}</div>
         <div className="space-y-2">
           {members.map(m => (
              <div key={m.id} className="flex items-center justify-between p-3 bg-gray-50 rounded">
-                <div className="flex items-center gap-3">
-                   <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${m.color}`}>{m.name[0]}</div>
-                   <div>
-                     <div className="font-bold text-gray-800">{m.name}</div>
-                     <div className="text-xs text-gray-500">{m.role === 'admin' ? '管理員' : '一般成員'}</div>
-                   </div>
-                </div>
-                {currentUserRole.role === 'admin' && (
-                  <div className="flex gap-2">
-                     <button onClick={() => { setTargetMemberId(m.id); setShowChangePasswordModal(true); }} className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded text-gray-600 hover:bg-gray-100 flex items-center gap-1"><Key size={12}/> 重設密碼</button>
-                  </div>
-                )}
+                <div className="flex items-center gap-3"><div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${m.color}`}>{m.name[0]}</div><div><div className="font-bold text-gray-800">{m.name}</div><div className="text-xs text-gray-500">{m.role === 'admin' ? '管理員' : '一般成員'}</div></div></div>
+                {currentUserRole.role === 'admin' && (<div className="flex gap-2"><button onClick={() => { setTargetMemberId(m.id); setShowChangePasswordModal(true); }} className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded text-gray-600 hover:bg-gray-100 flex items-center gap-1"><Key size={12}/> 重設密碼</button></div>)}
              </div>
           ))}
         </div>
       </section>
       <section className="mb-8">
-        <div className="flex justify-between items-center mb-4 border-b pb-2">
-           <h3 className="font-bold text-gray-700">日曆項目分類 (Highlight)</h3>
-           <button onClick={() => handleUpdateCategory({ name: '新分類', color: 'bg-gray-100 text-gray-800 border-gray-200' })} className="text-sm text-blue-600 flex items-center gap-1"><Plus size={14}/> 新增</button>
-        </div>
+        <div className="flex justify-between items-center mb-4 border-b pb-2"><h3 className="font-bold text-gray-700">日曆項目分類 (Highlight)</h3><button onClick={() => handleUpdateCategory({ name: '新分類', color: 'bg-gray-100 text-gray-800 border-gray-200' })} className="text-sm text-blue-600 flex items-center gap-1"><Plus size={14}/> 新增</button></div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
            {categories.map(c => (
              <div key={c.id} className={`p-3 rounded border flex justify-between items-center ${c.color}`}>
                <input value={c.name} disabled={c.type === 'system'} onChange={(e) => handleUpdateCategory({...c, name: e.target.value})} className="bg-transparent outline-none font-bold w-full"/>
-               {c.type === 'custom' && (
-                 <div className="flex items-center gap-2">
-                    <button className="text-gray-400 hover:text-red-500" onClick={() => setCategories(categories.filter(x => x.id !== c.id))}><Trash2 size={14}/></button>
-                 </div>
-               )}
-               {c.type === 'system' && <span className="text-[10px] uppercase opacity-50">預設</span>}
+               {c.type === 'custom' && (<div className="flex items-center gap-2"><button className="text-gray-400 hover:text-red-500" onClick={() => setCategories(categories.filter(x => x.id !== c.id))}><Trash2 size={14}/></button></div>)}
              </div>
            ))}
         </div>
       </section>
     </div>
   );
-
-  const AddMemberModal = () => {
-      if(!showAddMemberModal) return null;
-      const [name, setName] = useState('');
-      const [role, setRole] = useState('member');
-      const [color, setColor] = useState('bg-gray-100 text-gray-800 border-gray-200');
-
-      return (
-          <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
-              <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-sm">
-                  <h3 className="font-bold text-lg mb-4">新增家庭成員</h3>
-                  <div className="space-y-4">
-                      <input className="w-full border p-2 rounded" placeholder="名稱 (例如: 爺爺)" value={name} onChange={e => setName(e.target.value)} />
-                      <select className="w-full border p-2 rounded" value={role} onChange={e => setRole(e.target.value)}>
-                          <option value="member">一般成員</option>
-                          <option value="admin">管理員</option>
-                      </select>
-                      <div className="text-xs text-gray-500">預設密碼為 888888</div>
-                      <div className="flex gap-2 justify-end pt-2">
-                          <button onClick={() => setShowAddMemberModal(false)} className="px-4 py-2 bg-gray-100 rounded">取消</button>
-                          <button onClick={() => handleAddMember({name, role, color})} disabled={!name} className="px-4 py-2 bg-blue-600 text-white rounded font-bold">確認新增</button>
-                      </div>
-                  </div>
-              </div>
-          </div>
-      );
-  };
-
-  const ChangePasswordModal = () => {
-      if(!showChangePasswordModal) return null;
-      const [pwd, setPwd] = useState('');
-
-      return (
-          <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
-              <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-sm">
-                  <h3 className="font-bold text-lg mb-4">重設密碼</h3>
-                  <div className="space-y-4">
-                      <input className="w-full border p-2 rounded text-center tracking-widest" placeholder="新密碼" value={pwd} onChange={e => setPwd(e.target.value)} />
-                      <div className="flex gap-2 justify-end pt-2">
-                          <button onClick={() => setShowChangePasswordModal(false)} className="px-4 py-2 bg-gray-100 rounded">取消</button>
-                          <button onClick={() => handleChangePassword(pwd)} disabled={!pwd} className="px-4 py-2 bg-blue-600 text-white rounded font-bold">確認修改</button>
-                      </div>
-                  </div>
-              </div>
-          </div>
-      );
-  };
-  
-  // --- Modals (Fixed definitions) ---
-  const EventFormModal = () => {
-    if (!showEventModal) return null;
-    const [formData, setFormData] = useState({
-      title: editingItem?.title || '',
-      type: editingItem?.type || 'general',
-      date: editingItem?.date || formatDate(selectedDate),
-      startTime: editingItem?.startTime || '09:00',
-      endTime: editingItem?.endTime || '10:00',
-      participants: editingItem?.participants || members.map(m=>m.id),
-      notes: editingItem?.notes || ''
-    });
-
-    return (
-      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-          <h3 className="text-lg font-bold mb-4">{editingItem?.id ? '修改日程' : '新增日程'}</h3>
-          <div className="space-y-4">
-             <input className="w-full border rounded p-2 font-bold" placeholder="標題" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
-             <div>
-               <label className="text-xs text-gray-500 mb-1 block">分類</label>
-               <div className="flex flex-wrap gap-2">
-                 {categories.map(cat => (
-                   <button 
-                     key={cat.id} 
-                     onClick={() => setFormData({...formData, type: cat.id})}
-                     className={`px-3 py-1 text-xs rounded border transition-all ${formData.type === cat.id ? `${cat.color} ring-2 ring-offset-1 ring-gray-300 font-bold` : 'bg-white text-gray-500'}`}
-                   >
-                     {cat.name}
-                   </button>
-                 ))}
-               </div>
-             </div>
-             <div className="flex gap-2">
-               <input type="date" className="w-full border rounded p-2" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
-               <input type="time" className="w-full border rounded p-2" value={formData.startTime} onChange={e => setFormData({...formData, startTime: e.target.value})} />
-             </div>
-             <div>
-               <label className="text-xs text-gray-500 mb-1 block">參與者</label>
-               <div className="flex flex-wrap gap-2">
-                 {members.map(m => (
-                   <button 
-                     key={m.id}
-                     onClick={() => {
-                        const newP = formData.participants.includes(m.id) ? formData.participants.filter(p => p !== m.id) : [...formData.participants, m.id];
-                        setFormData({...formData, participants: newP});
-                     }}
-                     className={`px-2 py-1 rounded text-xs border ${formData.participants.includes(m.id) ? `${m.color} ring-2 ring-offset-1 ring-blue-300` : 'bg-gray-50 border-gray-200 text-gray-500'}`}
-                   >
-                     {m.name.split(' ')[0]}
-                   </button>
-                 ))}
-               </div>
-             </div>
-             <textarea className="w-full border rounded p-2 h-20 text-sm" placeholder="備註..." value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})}></textarea>
-             <div className="flex gap-2 pt-2">
-               {editingItem?.id && <button onClick={() => { deleteItem('events', editingItem.id); setShowEventModal(false); }} className="px-4 py-2 text-red-500 border rounded hover:bg-red-50"><Trash2/></button>}
-               <button onClick={() => setShowEventModal(false)} className="flex-1 px-4 py-2 bg-gray-100 rounded">取消</button>
-               <button onClick={() => saveEvent(formData)} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">儲存</button>
-             </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const TripWizard = () => {
-    if (!showTripWizard) return null;
-    const [step, setStep] = useState(1);
-    const [data, setData] = useState({
-      arrivalType: 'Flight',
-      arrivalDetail: '直飛',
-      localTransport: '公共交通',
-      destination: '', 
-      startDate: formatDate(new Date()), endDate: formatDate(new Date(Date.now() + 5*86400000)), 
-      participants: members.map(m => m.id),
-      hotelStar: 4, hotelType: 'City Hotel'
-    });
-    const createList = () => {
-      const createItem = (name, qty=1) => ({ name, qty, packed: false });
-      const shared = [
-        createItem('Wifi 蛋/SIM卡', 2), createItem('萬能轉插', 2), createItem('急救包', 1), createItem('充電器總座', 1)
-      ];
-      const individualBase = [
-        createItem('護照', 1), createItem('手機', 1), createItem('內衣褲', 5), createItem('襪子', 5), createItem('替換衣物', 5)
-      ];
-      if (data.arrivalDetail === '轉機' || data.arrivalType === 'Train') individualBase.push(createItem('頸枕'));
-      if (data.localTransport === '自駕 (Rental Car)') {
-        shared.push(createItem('國際車牌', 1)); shared.push(createItem('車用手機架', 1)); shared.push(createItem('車充 (USB)', 1)); individualBase.push(createItem('太陽眼鏡'));
-      } else if (data.localTransport === '公共交通') {
-        individualBase.push(createItem('交通卡 (IC Card)')); individualBase.push(createItem('好行的鞋')); individualBase.push(createItem('零錢包'));
-      }
-      if (data.hotelStar < 3) individualBase.push(createItem('洗漱用品'), createItem('毛巾'));
-      if (data.hotelType === 'Resort') individualBase.push(createItem('泳衣'), createItem('太陽眼鏡'));
-      const individual = {};
-      data.participants.forEach(pid => {
-         individual[pid] = [...individualBase];
-         if (pid === 'dad') individual[pid].push(createItem('鬚刨'));
-         if (pid === 'mom' || pid === 'daughter') individual[pid].push(createItem('化妝品'));
-      });
-      return { shared, individual };
-    };
-    const finish = () => {
-      addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'trips'), {
-        ...data, packingList: createList(), createdAt: serverTimestamp()
-      });
-      addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'events'), {
-        title: `✈️ ${data.destination} 之旅`,
-        date: data.startDate,
-        startTime: '00:00', endTime: '23:59',
-        type: 'travel',
-        participants: data.participants,
-        notes: `至 ${data.endDate}。${data.arrivalType}(${data.arrivalDetail}) • 當地:${data.localTransport}`,
-        createdAt: serverTimestamp()
-      });
-      setShowTripWizard(false);
-    };
-    return (
-      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg">
-          <h3 className="font-bold text-lg mb-4">新增旅行計劃</h3>
-          <div className="space-y-4">
-             <div><label className="block text-xs font-bold mb-1">目的地</label><input className="border w-full p-2 rounded mb-2" value={data.destination} onChange={e => setData({...data, destination: e.target.value})} placeholder="例如: 東京"/><div className="flex flex-wrap gap-2">{POPULAR_DESTINATIONS.map(city => (<button key={city} onClick={() => setData({...data, destination: city.split(',')[0]})} className="text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded text-gray-600">{city.split(',')[0]}</button>))}</div></div>
-             <div className="flex gap-4"><div className="flex-1"><label className="block text-xs font-bold mb-1">出發</label><input type="date" className="border w-full p-2 rounded" value={data.startDate} onChange={e => setData({...data, startDate: e.target.value})}/></div><div className="flex-1"><label className="block text-xs font-bold mb-1">回程</label><input type="date" className="border w-full p-2 rounded" value={data.endDate} onChange={e => setData({...data, endDate: e.target.value})}/></div></div>
-             <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold mb-1">往返交通 (Arrival)</label><select className="border w-full p-2 rounded" value={data.arrivalType} onChange={e => setData({...data, arrivalType: e.target.value})}><option value="Flight">飛機 (Flight)</option><option value="Train">高鐵/火車</option><option value="Ship">郵輪</option></select></div><div><label className="block text-xs font-bold mb-1">航班/車次情況</label><select className="border w-full p-2 rounded" value={data.arrivalDetail} onChange={e => setData({...data, arrivalDetail: e.target.value})}><option>直飛/直達</option><option>轉機/轉車</option></select></div></div>
-             <div><label className="block text-xs font-bold mb-1 text-blue-600">當地出行 (Local Transport)</label><select className="border w-full p-2 rounded border-blue-200 bg-blue-50" value={data.localTransport} onChange={e => setData({...data, localTransport: e.target.value})}><option>公共交通</option><option>自駕 (Rental Car)</option><option>包車 (Private Driver)</option><option>的士 (Taxi)</option></select></div>
-             <div className="grid grid-cols-2 gap-4"><div><label className="block text-xs font-bold mb-1">酒店星級 (1-5)</label><input type="number" min="1" max="5" className="border w-full p-2 rounded" value={data.hotelStar} onChange={e => setData({...data, hotelStar: parseInt(e.target.value)})}/></div><div><label className="block text-xs font-bold mb-1">住宿類型</label><select className="border w-full p-2 rounded" value={data.hotelType} onChange={e => setData({...data, hotelType: e.target.value})}><option value="City Hotel">城市酒店</option><option value="Resort">度假村</option><option value="Hostel/Airbnb">民宿/青年旅舍</option></select></div></div>
-             <button onClick={finish} className="w-full bg-blue-600 text-white py-3 rounded font-bold mt-4">建立行程與清單</button>
-             <button onClick={() => setShowTripWizard(false)} className="w-full text-gray-500 py-2">取消</button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-  
-  const ExpenseFormModal = () => {
-    if (!showExpenseModal) return null;
-    const [formData, setFormData] = useState({
-      name: editingItem?.name || '',
-      amount: editingItem?.amount || '',
-      day: editingItem?.day || 1,
-      month: editingItem?.month || 1, 
-      category: editingItem?.category || '日常',
-      bank: editingItem?.bank || '',
-      type: editingItem?.type || 'recurring_monthly'
-    });
-    const historicalNames = useMemo(() => {
-      const all = [...INITIAL_EXPENSES, ...expenses];
-      return [...new Set(all.map(e => e.name))];
-    }, [expenses]);
-    const handleNameChange = (e) => {
-      const val = e.target.value;
-      setFormData(prev => ({ ...prev, name: val }));
-      const match = [...INITIAL_EXPENSES, ...expenses].find(ex => ex.name === val);
-      if (match) {
-        setFormData(prev => ({ 
-          ...prev, name: val, amount: match.amount || '', category: match.category || '日常', bank: match.bank || '', day: match.day || 1, type: match.type || 'recurring_monthly', month: match.month || 1
-        }));
-      }
-    };
-    return (
-      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-          <h3 className="text-lg font-bold mb-4">{editingItem ? '修改開支' : '新增開支'}</h3>
-          <div className="space-y-3">
-             <div><label className="text-xs text-gray-500">項目名稱</label><input list="expense-names" className="w-full border rounded p-2" value={formData.name} onChange={handleNameChange} placeholder="例如：大埔帝欣苑..."/><datalist id="expense-names">{historicalNames.map((n, i) => <option key={i} value={n}/>)}</datalist></div>
-             <div><label className="text-xs text-gray-500 mb-1 block">頻率</label><div className="flex gap-2"><button onClick={() => setFormData({...formData, type: 'recurring_monthly'})} className={`flex-1 py-2 rounded text-sm border ${formData.type === 'recurring_monthly' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'bg-white text-gray-600'}`}>每月 (Monthly)</button><button onClick={() => setFormData({...formData, type: 'recurring_yearly'})} className={`flex-1 py-2 rounded text-sm border ${formData.type === 'recurring_yearly' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'bg-white text-gray-600'}`}>每年 (Yearly)</button></div></div>
-             <div className="grid grid-cols-2 gap-3"><div><label className="text-xs text-gray-500">金額</label><input type="number" className="w-full border rounded p-2" value={formData.amount} onChange={e => setFormData({...formData, amount: Number(e.target.value)})} /></div>{formData.type === 'recurring_yearly' ? (<div className="flex gap-2"><div className="flex-1"><label className="text-xs text-gray-500">月份</label><input type="number" min="1" max="12" className="w-full border rounded p-2" value={formData.month} onChange={e => setFormData({...formData, month: Number(e.target.value)})} /></div><div className="flex-1"><label className="text-xs text-gray-500">日期</label><input type="number" min="1" max="31" className="w-full border rounded p-2" value={formData.day} onChange={e => setFormData({...formData, day: Number(e.target.value)})} /></div></div>) : (<div><label className="text-xs text-gray-500">每月扣數日</label><input type="number" className="w-full border rounded p-2" value={formData.day} onChange={e => setFormData({...formData, day: Number(e.target.value)})} /></div>)}</div>
-             <div className="grid grid-cols-2 gap-3"><div><label className="text-xs text-gray-500">類別</label><select className="w-full border rounded p-2" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>{['樓宇','信用卡','保險','日常','貸款','其他'].map(c => <option key={c}>{c}</option>)}</select></div><div><label className="text-xs text-gray-500">銀行</label><input className="w-full border rounded p-2" value={formData.bank} onChange={e => setFormData({...formData, bank: e.target.value})} /></div></div>
-             <div className="flex gap-2 pt-4"><button onClick={() => setShowExpenseModal(false)} className="flex-1 px-4 py-2 bg-gray-100 rounded text-gray-600">取消</button><button onClick={() => saveExpense(formData)} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">儲存</button></div>
-          </div>
-        </div>
-      </div>
-    );
-  };
 
   if (loading) return <div className="h-screen flex items-center justify-center">載入中...</div>;
   if (authError) return (
@@ -1155,13 +840,11 @@ export default function App() {
         <div className="text-red-500 mb-4 flex justify-center"><AlertCircle size={48} /></div>
         <h2 className="text-xl font-bold text-gray-800 mb-2">無法登入系統</h2>
         <p className="text-sm text-gray-600 mb-4">{authError}</p>
-        <div className="text-xs bg-gray-100 p-4 rounded text-left overflow-x-auto">請檢查 Firebase 設定或網絡連線。</div>
         <button onClick={() => window.location.reload()} className="mt-6 bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">重新整理</button>
       </div>
     </div>
   );
 
-  // If not logged in app-level auth
   if (!currentUserRole) {
       return renderLoginScreen();
   }
@@ -1172,24 +855,14 @@ export default function App() {
       <div className="hidden md:flex flex-col w-64 bg-white border-r border-gray-200 z-10">
         <div className="p-6 border-b"><h1 className="text-xl font-bold text-blue-600 flex items-center gap-2"><div className="w-8 h-8 bg-blue-600 rounded text-white flex items-center justify-center">C</div> Charles Family</h1></div>
         <nav className="flex-1 p-4 space-y-1">
-          {[
-            { id: 'calendar', icon: CalendarIcon, label: '日曆日程' },
-            { id: 'expenses', icon: CreditCard, label: '家庭開支' },
-            { id: 'travel', icon: Plane, label: '旅行計劃' },
-            { id: 'settings', icon: Settings, label: '設定與身份' }
-          ].map(i => (
-            <button key={i.id} onClick={() => setActiveTab(i.id)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === i.id ? 'bg-blue-50 text-blue-700 font-bold' : 'text-gray-600 hover:bg-gray-50'}`}>
-              <i.icon size={18}/> {i.label}
-            </button>
+          {[{ id: 'calendar', icon: CalendarIcon, label: '日曆日程' }, { id: 'expenses', icon: CreditCard, label: '家庭開支' }, { id: 'travel', icon: Plane, label: '旅行計劃' }, { id: 'settings', icon: Settings, label: '設定與身份' }].map(i => (
+            <button key={i.id} onClick={() => setActiveTab(i.id)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${activeTab === i.id ? 'bg-blue-50 text-blue-700 font-bold' : 'text-gray-600 hover:bg-gray-50'}`}><i.icon size={18}/> {i.label}</button>
           ))}
         </nav>
         <div className="p-4 border-t bg-gray-50">
           <div className="flex items-center gap-3">
              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold border-2 border-white shadow ${currentUserRole.color}`}>{currentUserRole.name[0]}</div>
-             <div className="truncate flex-1">
-                 <div className="font-bold text-sm">{currentUserRole.name}</div>
-                 <div className="text-xs text-gray-500">{currentUserRole.role==='admin'?'管理員':'成員'}</div>
-             </div>
+             <div className="truncate flex-1"><div className="font-bold text-sm">{currentUserRole.name}</div><div className="text-xs text-gray-500">{currentUserRole.role==='admin'?'管理員':'成員'}</div></div>
              <button onClick={handleLogout} className="text-gray-400 hover:text-red-500"><LogOut size={16}/></button>
           </div>
         </div>
@@ -1215,22 +888,12 @@ export default function App() {
                  {trips.map(trip => (
                    <div key={trip.id} className="bg-white rounded-xl shadow-lg overflow-hidden border border-gray-100 flex flex-col">
                       <div className="p-5 border-b bg-gradient-to-r from-blue-50 to-white flex justify-between items-start">
-                         <div>
-                            <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2"><MapPin size={20} className="text-red-500"/> {trip.destination}</h3>
-                            <div className="text-sm text-gray-500 mt-1">{trip.startDate} - {trip.endDate} ({getDaysDiff(trip.startDate, trip.endDate)}天)</div>
-                         </div>
-                         <div className="flex gap-2">
-                           <button onClick={() => setShowPrintPreview({ trip })} className="p-2 bg-white border rounded hover:bg-gray-50 text-gray-600" title="列印報告"><Printer size={16}/></button>
-                         </div>
+                         <div><h3 className="text-xl font-bold text-gray-800 flex items-center gap-2"><MapPin size={20} className="text-red-500"/> {trip.destination}</h3><div className="text-sm text-gray-500 mt-1">{trip.startDate} - {trip.endDate} ({getDaysDiff(trip.startDate, trip.endDate)}天)</div></div>
+                         <div className="flex gap-2"><button onClick={() => setShowPrintPreview({ trip })} className="p-2 bg-white border rounded hover:bg-gray-50 text-gray-600" title="列印報告"><Printer size={16}/></button></div>
                       </div>
                       <div className="p-5 flex-1 bg-gray-50/50">
-                         <div className="flex justify-between items-center mb-4">
-                            <span className="font-bold text-gray-700 flex items-center gap-2"><Luggage size={16}/> 行李進度</span>
-                            <span className="text-xs font-bold bg-green-100 text-green-700 px-2 py-1 rounded">{calculatePackingProgress(trip.packingList)}%</span>
-                         </div>
-                         <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
-                            <div className="bg-green-500 h-2 rounded-full transition-all duration-500" style={{width: `${calculatePackingProgress(trip.packingList)}%`}}></div>
-                         </div>
+                         <div className="flex justify-between items-center mb-4"><span className="font-bold text-gray-700 flex items-center gap-2"><Luggage size={16}/> 行李進度</span><span className="text-xs font-bold bg-green-100 text-green-700 px-2 py-1 rounded">{calculatePackingProgress(trip.packingList)}%</span></div>
+                         <div className="w-full bg-gray-200 rounded-full h-2 mb-4"><div className="bg-green-500 h-2 rounded-full transition-all duration-500" style={{width: `${calculatePackingProgress(trip.packingList)}%`}}></div></div>
                          <button onClick={() => { setEditingItem(trip); setShowTripEditModal(true); }} className="w-full py-2 bg-white border border-blue-200 text-blue-600 rounded font-medium hover:bg-blue-50 shadow-sm">開始執行李 / 編輯清單</button>
                       </div>
                    </div>
