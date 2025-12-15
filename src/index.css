@@ -2,7 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 針對列印的優化樣式 */
 @media print {
   @page {
     margin: 0;
