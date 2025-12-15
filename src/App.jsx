@@ -5,9 +5,9 @@ import {
   signInAnonymously, 
   onAuthStateChanged,
   signInWithCustomToken,
-  setPersistence,        // 新增：設定持久化模式
-  inMemoryPersistence,   // 新增：記憶體模式 (修復 iframe 錯誤用)
-  browserLocalPersistence // 新增：本地模式 (正常情況用)
+  setPersistence,
+  inMemoryPersistence,
+  browserLocalPersistence
 } from 'firebase/auth';
 import { 
   getFirestore, 
@@ -63,7 +63,10 @@ import {
   Bus, 
   PieChart, 
   TrendingUp, 
-  Wallet 
+  Wallet,
+  Lock,
+  LogOut,
+  Key
 } from 'lucide-react';
 
 // --- 1. Firebase Initialization (Direct Config) ---
@@ -78,13 +81,11 @@ const firebaseConfig = {
   measurementId: "G-TW5BCHD6YR"
 };
 
-// Initialize Firebase
-// Check if app is already initialized to prevent errors in hot-reload
 let app;
 try {
   app = initializeApp(firebaseConfig);
 } catch (e) {
-  // Ignore duplicate app initialization error (safeguard for hot-reload)
+  // Ignore duplicate app initialization error
 }
 
 const auth = getAuth(app);
@@ -92,6 +93,13 @@ const db = getFirestore(app);
 const appId = 'charles-family-app';
 
 // --- Constants & Data ---
+
+const DEFAULT_MEMBERS_SEED = [
+    { name: '爸爸 (Charles)', role: 'admin', color: 'bg-blue-100 text-blue-800 border-blue-200', password: '888888' },
+    { name: '媽媽', role: 'admin', color: 'bg-pink-100 text-pink-800 border-pink-200', password: '888888' },
+    { name: '女兒 (中五)', role: 'member', color: 'bg-purple-100 text-purple-800 border-purple-200', password: '888888' },
+    { name: '兒子 (中一)', role: 'member', color: 'bg-green-100 text-green-800 border-green-200', password: '888888' },
+];
 
 const DEFAULT_CATEGORIES = [
   { id: 'general', name: '一般事務', color: 'bg-gray-100 text-gray-800 border-gray-200', type: 'system' },
@@ -177,14 +185,15 @@ export default function App() {
   const [authError, setAuthError] = useState(null);
   
   // Data State
-  const [members, setMembers] = useState([
-    { id: 'dad', name: '爸爸 (Charles)', role: 'admin', color: 'bg-blue-100 text-blue-800 border-blue-200' },
-    { id: 'mom', name: '媽媽', role: 'admin', color: 'bg-pink-100 text-pink-800 border-pink-200' },
-    { id: 'daughter', name: '女兒 (中五)', role: 'member', color: 'bg-purple-100 text-purple-800 border-purple-200' },
-    { id: 'son', name: '兒子 (中一)', role: 'member', color: 'bg-green-100 text-green-800 border-green-200' },
-  ]);
+  const [members, setMembers] = useState([]);
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES);
-  const [currentUserRole, setCurrentUserRole] = useState(members[0]);
+  
+  // Auth State
+  const [currentUserRole, setCurrentUserRole] = useState(null); // The member logged in
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [loginTargetMember, setLoginTargetMember] = useState(null);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [loginError, setLoginError] = useState('');
   
   const [events, setEvents] = useState([]);
   const [expenses, setExpenses] = useState([]);
@@ -205,21 +214,23 @@ export default function App() {
   const [showPrintPreview, setShowPrintPreview] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
 
+  // Admin Modals
+  const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+  const [targetMemberId, setTargetMemberId] = useState(null);
+
   // --- FORCE STYLE INJECTION ---
   useEffect(() => {
-    // 1. Inject Tailwind CDN script
     const script = document.createElement('script');
     script.src = "https://cdn.tailwindcss.com";
     script.async = true;
     document.head.appendChild(script);
 
-    // 2. Fallback: Inject Static CSS link (in case script is blocked)
     const link = document.createElement('link');
     link.rel = 'stylesheet';
     link.href = 'https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css';
     document.head.appendChild(link);
 
-    // 3. Fallback: Inject basic styles for layout (Grid/Flex)
     const style = document.createElement('style');
     style.innerHTML = `
       body { font-family: system-ui, -apple-system, sans-serif; background: #f3f4f6; }
@@ -237,18 +248,14 @@ export default function App() {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // --- FIX FOR "Access to storage is not allowed" ---
-        // Attempt to set persistence to LOCAL (best case), fall back to MEMORY (iframe case)
         try {
             await setPersistence(auth, browserLocalPersistence);
         } catch (storageErr) {
-            console.warn("Storage access blocked (iframe?), using in-memory persistence.", storageErr);
             await setPersistence(auth, inMemoryPersistence);
         }
         
         await signInAnonymously(auth);
       } catch (err) {
-        console.error("Auth Error:", err);
         setAuthError(err.message);
         setLoading(false);
       }
@@ -257,16 +264,31 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
       if(u) setAuthError(null);
-      setLoading(false);
     });
     return () => unsubscribe();
   }, []);
 
   useEffect(() => {
     if (!user) return;
+    
+    // Listen to Members
+    const unsubMembers = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'members')), (snap) => {
+        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        if (data.length === 0) {
+            // Seed members
+            DEFAULT_MEMBERS_SEED.forEach(async (m) => {
+                await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'members'), {
+                    ...m, createdAt: serverTimestamp()
+                });
+            });
+        } else {
+            setMembers(data);
+        }
+        setLoading(false);
+    });
+
     const unsubEvents = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'events')), 
-      (snap) => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
-      (err) => console.error("Events Sync Error:", err)
+      (snap) => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     );
     
     const unsubExpenses = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses')), 
@@ -276,16 +298,14 @@ export default function App() {
         if (data.length === 0) {
           INITIAL_EXPENSES.forEach(e => addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses'), { ...e, createdAt: serverTimestamp() }));
         }
-      },
-      (err) => console.error("Expenses Sync Error:", err)
+      }
     );
 
     const unsubTrips = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'trips')), 
-      (snap) => setTrips(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
-      (err) => console.error("Trips Sync Error:", err)
+      (snap) => setTrips(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     );
 
-    return () => { unsubEvents(); unsubExpenses(); unsubTrips(); };
+    return () => { unsubMembers(); unsubEvents(); unsubExpenses(); unsubTrips(); };
   }, [user]);
 
   // --- Logic Helpers ---
@@ -321,12 +341,37 @@ export default function App() {
 
   // --- Actions ---
 
-  const handleUpdateMember = (newMember) => {
-    if (newMember.id) {
-       setMembers(members.map(m => m.id === newMember.id ? newMember : m));
-    } else {
-       setMembers([...members, { ...newMember, id: `user_${Date.now()}`, color: 'bg-gray-100 text-gray-800 border-gray-200' }]);
-    }
+  const handleLogin = () => {
+      if (passwordInput === loginTargetMember.password) {
+          setCurrentUserRole(loginTargetMember);
+          setLoginTargetMember(null);
+          setPasswordInput('');
+          setLoginError('');
+      } else {
+          setLoginError('密碼錯誤，請重試');
+      }
+  };
+
+  const handleLogout = () => {
+      setCurrentUserRole(null);
+  };
+
+  const handleAddMember = async (newMember) => {
+      await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'members'), {
+          ...newMember,
+          password: '888888', // Default password
+          createdAt: serverTimestamp()
+      });
+      setShowAddMemberModal(false);
+  };
+
+  const handleChangePassword = async (newPassword) => {
+      if (!targetMemberId) return;
+      await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'members', targetMemberId), {
+          password: newPassword
+      });
+      setShowChangePasswordModal(false);
+      setTargetMemberId(null);
   };
 
   const handleUpdateCategory = (newCat) => {
@@ -417,6 +462,61 @@ export default function App() {
   };
 
   // --- Views ---
+  
+  const LoginScreen = () => {
+      if (loginTargetMember) {
+          return (
+              <div className="h-screen flex items-center justify-center bg-gray-100 p-4">
+                  <div className="bg-white p-8 rounded-xl shadow-2xl w-full max-w-sm text-center">
+                      <div className={`w-20 h-20 rounded-full mx-auto flex items-center justify-center text-3xl font-bold mb-4 ${loginTargetMember.color}`}>
+                          {loginTargetMember.name[0]}
+                      </div>
+                      <h2 className="text-2xl font-bold mb-6">歡迎, {loginTargetMember.name.split(' ')[0]}</h2>
+                      
+                      <div className="mb-4">
+                          <input 
+                              type="password" 
+                              className="w-full text-center border-2 border-gray-300 rounded-lg p-3 text-lg tracking-widest focus:border-blue-500 outline-none"
+                              placeholder="輸入密碼 (預設 888888)"
+                              value={passwordInput}
+                              onChange={e => setPasswordInput(e.target.value)}
+                              onKeyDown={e => e.key === 'Enter' && handleLogin()}
+                          />
+                      </div>
+                      {loginError && <div className="text-red-500 text-sm mb-4">{loginError}</div>}
+                      
+                      <button onClick={handleLogin} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold hover:bg-blue-700 mb-3">登入</button>
+                      <button onClick={() => { setLoginTargetMember(null); setLoginError(''); setPasswordInput(''); }} className="text-gray-500 text-sm">返回選擇使用者</button>
+                  </div>
+              </div>
+          )
+      }
+      
+      return (
+          <div className="h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
+             <div className="text-center mb-10">
+                 <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center text-white text-3xl font-bold mx-auto mb-4">C</div>
+                 <h1 className="text-3xl font-bold text-gray-800">Charles Family App</h1>
+                 <p className="text-gray-500">請選擇您的身分登入</p>
+             </div>
+             
+             <div className="grid grid-cols-2 gap-4 w-full max-w-md">
+                {members.map(m => (
+                    <button 
+                        key={m.id} 
+                        onClick={() => setLoginTargetMember(m)}
+                        className="bg-white p-6 rounded-xl shadow-sm hover:shadow-md border border-transparent hover:border-blue-200 transition-all flex flex-col items-center gap-3"
+                    >
+                        <div className={`w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold ${m.color}`}>
+                            {m.name[0]}
+                        </div>
+                        <span className="font-bold text-gray-700">{m.name.split(' ')[0]}</span>
+                    </button>
+                ))}
+             </div>
+          </div>
+      );
+  };
 
   const renderPrintPreview = () => {
     if (!showPrintPreview) return null;
@@ -786,16 +886,22 @@ export default function App() {
     <div className="max-w-3xl mx-auto bg-white rounded-lg shadow p-8 overflow-y-auto">
       <h2 className="text-2xl font-bold mb-8 flex items-center gap-2"><Settings/> 系統設定</h2>
       
-      {/* Role Simulation */}
+      {/* Current User Info */}
       <section className="mb-8">
-        <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">當前身份模擬</h3>
-        <div className="flex gap-2 flex-wrap">
-           {members.map(m => (
-             <button key={m.id} onClick={() => setCurrentUserRole(m)} className={`flex items-center gap-2 px-4 py-2 rounded border ${currentUserRole.id === m.id ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' : 'hover:bg-gray-50'}`}>
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${m.color}`}>{m.name[0]}</div>
-                <span>{m.name}</span>
-             </button>
-           ))}
+        <h3 className="font-bold text-gray-700 mb-4 border-b pb-2">當前登入</h3>
+        <div className="flex items-center justify-between bg-blue-50 p-4 rounded-xl border border-blue-100">
+           <div className="flex items-center gap-3">
+              <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold ${currentUserRole.color}`}>
+                 {currentUserRole.name[0]}
+              </div>
+              <div>
+                 <div className="font-bold text-gray-800">{currentUserRole.name}</div>
+                 <div className="text-xs text-gray-500">{currentUserRole.role === 'admin' ? '管理員' : '一般成員'}</div>
+              </div>
+           </div>
+           <button onClick={handleLogout} className="flex items-center gap-2 text-red-500 hover:text-red-700 text-sm font-bold bg-white px-4 py-2 rounded shadow-sm">
+              <LogOut size={16}/> 登出
+           </button>
         </div>
       </section>
 
@@ -803,28 +909,31 @@ export default function App() {
       <section className="mb-8">
         <div className="flex justify-between items-center mb-4 border-b pb-2">
            <h3 className="font-bold text-gray-700">家庭成員管理</h3>
-           <button onClick={() => handleUpdateMember({ name: '新成員', role: 'member', color: 'bg-gray-100 text-gray-800' })} className="text-sm text-blue-600 flex items-center gap-1"><Plus size={14}/> 新增</button>
+           {currentUserRole.role === 'admin' && (
+             <button onClick={() => setShowAddMemberModal(true)} className="text-sm bg-blue-600 text-white px-3 py-1 rounded flex items-center gap-1 hover:bg-blue-700"><Plus size={14}/> 新增成員</button>
+           )}
         </div>
         <div className="space-y-2">
           {members.map(m => (
              <div key={m.id} className="flex items-center justify-between p-3 bg-gray-50 rounded">
                 <div className="flex items-center gap-3">
-                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${m.color}`}>{m.name[0]}</div>
+                   <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${m.color}`}>{m.name[0]}</div>
                    <div>
-                     <input className="font-bold bg-transparent border-b border-transparent focus:border-blue-300 outline-none" value={m.name} onChange={(e) => handleUpdateMember({...m, name: e.target.value})}/>
-                     <div className="text-xs text-gray-500">
-                       <select value={m.role} onChange={(e) => handleUpdateMember({...m, role: e.target.value})} className="bg-transparent text-xs">
-                         <option value="admin">管理員</option>
-                         <option value="member">成員</option>
-                       </select>
-                     </div>
+                     <div className="font-bold text-gray-800">{m.name}</div>
+                     <div className="text-xs text-gray-500">{m.role === 'admin' ? '管理員' : '一般成員'}</div>
                    </div>
                 </div>
-                <div className="flex gap-2">
-                   {['bg-blue-100 text-blue-800','bg-pink-100 text-pink-800','bg-green-100 text-green-800','bg-purple-100 text-purple-800'].map(c => (
-                     <button key={c} onClick={() => handleUpdateMember({...m, color: c})} className={`w-4 h-4 rounded-full ${c} border border-gray-300 ${m.color.includes(c.split(' ')[0]) ? 'ring-2 ring-offset-1 ring-gray-400' : ''}`}></button>
-                   ))}
-                </div>
+                
+                {currentUserRole.role === 'admin' && (
+                  <div className="flex gap-2">
+                     <button 
+                       onClick={() => { setTargetMemberId(m.id); setShowChangePasswordModal(true); }}
+                       className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded text-gray-600 hover:bg-gray-100 flex items-center gap-1"
+                     >
+                        <Key size={12}/> 重設密碼
+                     </button>
+                  </div>
+                )}
              </div>
           ))}
         </div>
@@ -858,423 +967,53 @@ export default function App() {
     </div>
   );
 
-  // --- Packing List Mode ---
+  // --- Modals for Admin ---
 
-  const PackingMode = ({ trip }) => {
-     const estimate = getLuggageEstimate(trip);
-     const progress = calculatePackingProgress(trip.packingList);
+  const AddMemberModal = () => {
+      if(!showAddMemberModal) return null;
+      const [name, setName] = useState('');
+      const [role, setRole] = useState('member');
+      const [color, setColor] = useState('bg-gray-100 text-gray-800 border-gray-200');
 
-     return (
-       <div className="fixed inset-0 bg-white z-50 flex flex-col">
-         {/* Header */}
-         <div className="bg-blue-600 text-white p-4 flex justify-between items-center shadow-md">
-            <div>
-              <h2 className="text-xl font-bold flex items-center gap-2"><Briefcase/> 執行李模式: {trip.destination}</h2>
-              <div className="text-blue-100 text-sm mt-1">{trip.startDate} 出發 • 完成度 {progress}%</div>
-            </div>
-            <button onClick={() => setShowTripEditModal(false)} className="bg-blue-700 p-2 rounded hover:bg-blue-800"><X/></button>
-         </div>
-
-         <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
-            {/* Sidebar Stats */}
-            <div className="w-full md:w-80 bg-gray-50 p-6 border-r overflow-y-auto">
-               <div className="bg-white p-4 rounded-xl shadow-sm mb-6">
-                  <h3 className="text-gray-500 text-xs font-bold uppercase mb-2">AI 智能分析</h3>
+      return (
+          <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+              <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-sm">
+                  <h3 className="font-bold text-lg mb-4">新增家庭成員</h3>
                   <div className="space-y-4">
-                     <div>
-                       <div className="flex justify-between text-sm mb-1"><span>預估總重</span> <span className="font-bold">{estimate.totalWeight} kg</span></div>
-                       <div className="w-full bg-gray-200 rounded-full h-2"><div className="bg-blue-500 h-2 rounded-full" style={{width: `${Math.min(estimate.totalWeight, 50)*2}%`}}></div></div>
-                     </div>
-                     <div className="bg-blue-50 p-3 rounded text-sm text-blue-800 border border-blue-100">
-                        <div className="font-bold mb-1 flex items-center gap-1"><Luggage size={14}/> 建議行李組合</div>
-                        {estimate.advice}
-                     </div>
-                  </div>
-               </div>
-               
-               {/* Transport & Accommodation Info */}
-               <div className="bg-white p-4 rounded-xl shadow-sm mb-6">
-                 <h3 className="text-gray-500 text-xs font-bold uppercase mb-4">行程資訊</h3>
-                 <div className="text-sm space-y-2">
-                   <div className="flex items-center gap-2"><Plane size={14} className="text-gray-400"/> {trip.arrivalType} ({trip.arrivalDetail})</div>
-                   <div className="flex items-center gap-2"><Car size={14} className="text-gray-400"/> 當地: {trip.localTransport}</div>
-                   <div className="flex items-center gap-2"><Hotel size={14} className="text-gray-400"/> {trip.hotelStar}星 {trip.hotelType}</div>
-                 </div>
-               </div>
-
-               <div className="bg-white p-4 rounded-xl shadow-sm">
-                 <h3 className="text-gray-500 text-xs font-bold uppercase mb-4">參與成員</h3>
-                 <div className="space-y-2">
-                   {trip.participants.map(pid => {
-                     const m = members.find(mem => mem.id === pid);
-                     if(!m) return null;
-                     return (
-                       <div key={pid} className="flex items-center gap-2">
-                         <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs ${m.color}`}>{m.name[0]}</div>
-                         <span className="text-sm">{m.name}</span>
-                       </div>
-                     )
-                   })}
-                 </div>
-               </div>
-            </div>
-
-            {/* Checklist */}
-            <div className="flex-1 overflow-y-auto p-6 md:p-10">
-               {/* Shared */}
-               <div className="mb-8">
-                  <h3 className="font-bold text-xl mb-4 text-orange-600 flex items-center gap-2"><BoxIcon/> 共用物品</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {trip.packingList?.shared?.map((item, i) => (
-                      <div key={i} 
-                           onClick={() => togglePackedItem(trip, 'shared', i)}
-                           className={`p-3 rounded border cursor-pointer flex items-center gap-3 transition-all ${item.packed ? 'bg-green-50 border-green-200 opacity-60' : 'bg-white hover:border-blue-300'}`}>
-                         {item.packed ? <CheckSquare className="text-green-500"/> : <Square className="text-gray-300"/>}
-                         <div className="flex-1">
-                           <div className={`font-medium ${item.packed ? 'line-through text-gray-500' : 'text-gray-800'}`}>{item.name}</div>
-                         </div>
-                         <span className="text-xs bg-gray-100 px-2 py-1 rounded">x{item.qty}</span>
+                      <input className="w-full border p-2 rounded" placeholder="名稱 (例如: 爺爺)" value={name} onChange={e => setName(e.target.value)} />
+                      <select className="w-full border p-2 rounded" value={role} onChange={e => setRole(e.target.value)}>
+                          <option value="member">一般成員</option>
+                          <option value="admin">管理員</option>
+                      </select>
+                      <div className="text-xs text-gray-500">預設密碼為 888888</div>
+                      <div className="flex gap-2 justify-end pt-2">
+                          <button onClick={() => setShowAddMemberModal(false)} className="px-4 py-2 bg-gray-100 rounded">取消</button>
+                          <button onClick={() => handleAddMember({name, role, color})} disabled={!name} className="px-4 py-2 bg-blue-600 text-white rounded font-bold">確認新增</button>
                       </div>
-                    ))}
                   </div>
-               </div>
-
-               {/* Individual */}
-               {Object.entries(trip.packingList?.individual || {}).map(([uid, items]) => {
-                  const m = members.find(mem => mem.id === uid);
-                  if(!m) return null;
-                  return (
-                    <div key={uid} className="mb-8">
-                       <h3 className={`font-bold text-xl mb-4 flex items-center gap-2 p-2 rounded w-fit ${m.color}`}><User size={20}/> {m.name}</h3>
-                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                         {items.map((item, i) => (
-                           <div key={i} 
-                                onClick={() => togglePackedItem(trip, 'individual', i, uid)}
-                                className={`p-3 rounded border cursor-pointer flex items-center gap-3 transition-all ${item.packed ? 'bg-green-50 border-green-200 opacity-60' : 'bg-white hover:border-blue-300'}`}>
-                             {item.packed ? <CheckSquare className="text-green-500"/> : <Square className="text-gray-300"/>}
-                             <div className="flex-1">
-                               <div className={`font-medium ${item.packed ? 'line-through text-gray-500' : 'text-gray-800'}`}>{item.name}</div>
-                             </div>
-                             <span className="text-xs bg-gray-100 px-2 py-1 rounded">x{item.qty}</span>
-                           </div>
-                         ))}
-                       </div>
-                    </div>
-                  );
-               })}
-            </div>
-         </div>
-       </div>
-     );
-  };
-
-  const BoxIcon = () => (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
-  );
-
-  // --- Modals ---
-  
-  const EventFormModal = () => {
-    if (!showEventModal) return null;
-    const [formData, setFormData] = useState({
-      title: editingItem?.title || '',
-      type: editingItem?.type || 'general',
-      date: editingItem?.date || formatDate(selectedDate),
-      startTime: editingItem?.startTime || '09:00',
-      endTime: editingItem?.endTime || '10:00',
-      participants: editingItem?.participants || members.map(m=>m.id),
-      notes: editingItem?.notes || ''
-    });
-
-    return (
-      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-          <h3 className="text-lg font-bold mb-4">{editingItem?.id ? '修改日程' : '新增日程'}</h3>
-          <div className="space-y-4">
-             <input className="w-full border rounded p-2 font-bold" placeholder="標題" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
-             
-             <div>
-               <label className="text-xs text-gray-500 mb-1 block">分類</label>
-               <div className="flex flex-wrap gap-2">
-                 {categories.map(cat => (
-                   <button 
-                     key={cat.id} 
-                     onClick={() => setFormData({...formData, type: cat.id})}
-                     className={`px-3 py-1 text-xs rounded border transition-all ${formData.type === cat.id ? `${cat.color} ring-2 ring-offset-1 ring-gray-300 font-bold` : 'bg-white text-gray-500'}`}
-                   >
-                     {cat.name}
-                   </button>
-                 ))}
-               </div>
-             </div>
-
-             <div className="flex gap-2">
-               <input type="date" className="w-full border rounded p-2" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
-               <input type="time" className="w-full border rounded p-2" value={formData.startTime} onChange={e => setFormData({...formData, startTime: e.target.value})} />
-             </div>
-             
-             <div>
-               <label className="text-xs text-gray-500 mb-1 block">參與者</label>
-               <div className="flex flex-wrap gap-2">
-                 {members.map(m => (
-                   <button 
-                     key={m.id}
-                     onClick={() => {
-                        const newP = formData.participants.includes(m.id) 
-                          ? formData.participants.filter(p => p !== m.id)
-                          : [...formData.participants, m.id];
-                        setFormData({...formData, participants: newP});
-                     }}
-                     className={`px-2 py-1 rounded text-xs border ${formData.participants.includes(m.id) ? `${m.color} ring-2 ring-offset-1 ring-blue-300` : 'bg-gray-50 border-gray-200 text-gray-500'}`}
-                   >
-                     {m.name.split(' ')[0]}
-                   </button>
-                 ))}
-               </div>
-             </div>
-
-             <textarea className="w-full border rounded p-2 h-20 text-sm" placeholder="備註..." value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})}></textarea>
-             
-             <div className="flex gap-2 pt-2">
-               {editingItem?.id && <button onClick={() => { deleteItem('events', editingItem.id); setShowEventModal(false); }} className="px-4 py-2 text-red-500 border rounded hover:bg-red-50"><Trash2/></button>}
-               <button onClick={() => setShowEventModal(false)} className="flex-1 px-4 py-2 bg-gray-100 rounded">取消</button>
-               <button onClick={() => saveEvent(formData)} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">儲存</button>
-             </div>
+              </div>
           </div>
-        </div>
-      </div>
-    );
+      );
   };
 
-  const TripWizard = () => {
-    if (!showTripWizard) return null;
-    const [step, setStep] = useState(1);
-    const [data, setData] = useState({
-      arrivalType: 'Flight', // 飛機/高鐵/船
-      arrivalDetail: '直飛', // 直飛/轉機
-      localTransport: '公共交通', // 自駕/公共交通/包車
-      destination: '', 
-      startDate: formatDate(new Date()), endDate: formatDate(new Date(Date.now() + 5*86400000)), 
-      participants: members.map(m => m.id),
-      hotelStar: 4, hotelType: 'City Hotel'
-    });
+  const ChangePasswordModal = () => {
+      if(!showChangePasswordModal) return null;
+      const [pwd, setPwd] = useState('');
 
-    const createList = () => {
-      const createItem = (name, qty=1) => ({ name, qty, packed: false });
-      
-      const shared = [
-        createItem('Wifi 蛋/SIM卡', 2), createItem('萬能轉插', 2), createItem('急救包', 1), createItem('充電器總座', 1)
-      ];
-      const individualBase = [
-        createItem('護照', 1), createItem('手機', 1), createItem('內衣褲', 5), createItem('襪子', 5), createItem('替換衣物', 5)
-      ];
-
-      // Logic based on new inputs
-      // Arrival Logic
-      if (data.arrivalDetail === '轉機' || data.arrivalType === 'Train') individualBase.push(createItem('頸枕'));
-      
-      // Local Transport Logic
-      if (data.localTransport === '自駕 (Rental Car)') {
-        shared.push(createItem('國際車牌', 1));
-        shared.push(createItem('車用手機架', 1));
-        shared.push(createItem('車充 (USB)', 1));
-        individualBase.push(createItem('太陽眼鏡'));
-      } else if (data.localTransport === '公共交通') {
-        individualBase.push(createItem('交通卡 (IC Card)'));
-        individualBase.push(createItem('好行的鞋'));
-        individualBase.push(createItem('零錢包'));
-      }
-
-      // Hotel Logic
-      if (data.hotelStar < 3) individualBase.push(createItem('洗漱用品'), createItem('毛巾'));
-      if (data.hotelType === 'Resort') individualBase.push(createItem('泳衣'), createItem('太陽眼鏡'));
-
-      const individual = {};
-      data.participants.forEach(pid => {
-         individual[pid] = [...individualBase];
-         if (pid === 'dad') individual[pid].push(createItem('鬚刨'));
-         if (pid === 'mom' || pid === 'daughter') individual[pid].push(createItem('化妝品'));
-      });
-      return { shared, individual };
-    };
-
-    const finish = () => {
-      addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'trips'), {
-        ...data, packingList: createList(), createdAt: serverTimestamp()
-      });
-      addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'events'), {
-        title: `✈️ ${data.destination} 之旅`,
-        date: data.startDate,
-        startTime: '00:00', endTime: '23:59',
-        type: 'travel',
-        participants: data.participants,
-        notes: `至 ${data.endDate}。${data.arrivalType}(${data.arrivalDetail}) • 當地:${data.localTransport}`,
-        createdAt: serverTimestamp()
-      });
-      setShowTripWizard(false);
-    };
-
-    return (
-      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-lg">
-          <h3 className="font-bold text-lg mb-4">新增旅行計劃</h3>
-          <div className="space-y-4">
-             <div>
-               <label className="block text-xs font-bold mb-1">目的地</label>
-               <input className="border w-full p-2 rounded mb-2" value={data.destination} onChange={e => setData({...data, destination: e.target.value})} placeholder="例如: 東京"/>
-               <div className="flex flex-wrap gap-2">
-                 {POPULAR_DESTINATIONS.map(city => (
-                   <button key={city} onClick={() => setData({...data, destination: city.split(',')[0]})} className="text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded text-gray-600">{city.split(',')[0]}</button>
-                 ))}
-               </div>
-             </div>
-             <div className="flex gap-4">
-               <div className="flex-1"><label className="block text-xs font-bold mb-1">出發</label><input type="date" className="border w-full p-2 rounded" value={data.startDate} onChange={e => setData({...data, startDate: e.target.value})}/></div>
-               <div className="flex-1"><label className="block text-xs font-bold mb-1">回程</label><input type="date" className="border w-full p-2 rounded" value={data.endDate} onChange={e => setData({...data, endDate: e.target.value})}/></div>
-             </div>
-             
-             <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold mb-1">往返交通 (Arrival)</label>
-                  <select className="border w-full p-2 rounded" value={data.arrivalType} onChange={e => setData({...data, arrivalType: e.target.value})}>
-                     <option value="Flight">飛機 (Flight)</option>
-                     <option value="Train">高鐵/火車</option>
-                     <option value="Ship">郵輪</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold mb-1">航班/車次情況</label>
-                  <select className="border w-full p-2 rounded" value={data.arrivalDetail} onChange={e => setData({...data, arrivalDetail: e.target.value})}>
-                     <option>直飛/直達</option>
-                     <option>轉機/轉車</option>
-                  </select>
-                </div>
-             </div>
-
-             <div>
-                <label className="block text-xs font-bold mb-1 text-blue-600">當地出行 (Local Transport)</label>
-                <select className="border w-full p-2 rounded border-blue-200 bg-blue-50" value={data.localTransport} onChange={e => setData({...data, localTransport: e.target.value})}>
-                   <option>公共交通</option>
-                   <option>自駕 (Rental Car)</option>
-                   <option>包車 (Private Driver)</option>
-                   <option>的士 (Taxi)</option>
-                </select>
-             </div>
-
-             <div className="grid grid-cols-2 gap-4">
-                <div>
-                   <label className="block text-xs font-bold mb-1">酒店星級 (1-5)</label>
-                   <input type="number" min="1" max="5" className="border w-full p-2 rounded" value={data.hotelStar} onChange={e => setData({...data, hotelStar: parseInt(e.target.value)})}/>
-                </div>
-                <div>
-                   <label className="block text-xs font-bold mb-1">住宿類型</label>
-                   <select className="border w-full p-2 rounded" value={data.hotelType} onChange={e => setData({...data, hotelType: e.target.value})}>
-                      <option value="City Hotel">城市酒店</option>
-                      <option value="Resort">度假村</option>
-                      <option value="Hostel/Airbnb">民宿/青年旅舍</option>
-                   </select>
-                </div>
-             </div>
-
-             <button onClick={finish} className="w-full bg-blue-600 text-white py-3 rounded font-bold mt-4">建立行程與清單</button>
-             <button onClick={() => setShowTripWizard(false)} className="w-full text-gray-500 py-2">取消</button>
-          </div>
-        </div>
-      </div>
-    );
-  };
-  
-  const ExpenseFormModal = () => {
-    if (!showExpenseModal) return null;
-    const [formData, setFormData] = useState({
-      name: editingItem?.name || '',
-      amount: editingItem?.amount || '',
-      day: editingItem?.day || 1,
-      month: editingItem?.month || 1, // Added month
-      category: editingItem?.category || '日常',
-      bank: editingItem?.bank || '',
-      type: editingItem?.type || 'recurring_monthly'
-    });
-    
-    // Suggestion logic
-    const historicalNames = useMemo(() => {
-      const all = [...INITIAL_EXPENSES, ...expenses];
-      return [...new Set(all.map(e => e.name))];
-    }, [expenses]);
-
-    const handleNameChange = (e) => {
-      const val = e.target.value;
-      setFormData(prev => ({ ...prev, name: val }));
-      const match = [...INITIAL_EXPENSES, ...expenses].find(ex => ex.name === val);
-      if (match) {
-        setFormData(prev => ({ 
-          ...prev, 
-          name: val, 
-          amount: match.amount || '', 
-          category: match.category || '日常', 
-          bank: match.bank || '', 
-          day: match.day || 1,
-          type: match.type || 'recurring_monthly',
-          month: match.month || 1
-        }));
-      }
-    };
-
-    return (
-      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
-          <h3 className="text-lg font-bold mb-4">{editingItem ? '修改開支' : '新增開支'}</h3>
-          <div className="space-y-3">
-             <div>
-               <label className="text-xs text-gray-500">項目名稱</label>
-               <input list="expense-names" className="w-full border rounded p-2" value={formData.name} onChange={handleNameChange} placeholder="例如：大埔帝欣苑..."/>
-               <datalist id="expense-names">{historicalNames.map((n, i) => <option key={i} value={n}/>)}</datalist>
-             </div>
-             
-             {/* New Frequency Selection */}
-             <div>
-               <label className="text-xs text-gray-500 mb-1 block">頻率</label>
-               <div className="flex gap-2">
-                 <button 
-                   onClick={() => setFormData({...formData, type: 'recurring_monthly'})} 
-                   className={`flex-1 py-2 rounded text-sm border ${formData.type === 'recurring_monthly' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'bg-white text-gray-600'}`}
-                 >
-                   每月 (Monthly)
-                 </button>
-                 <button 
-                   onClick={() => setFormData({...formData, type: 'recurring_yearly'})} 
-                   className={`flex-1 py-2 rounded text-sm border ${formData.type === 'recurring_yearly' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'bg-white text-gray-600'}`}
-                 >
-                   每年 (Yearly)
-                 </button>
-               </div>
-             </div>
-
-             <div className="grid grid-cols-2 gap-3">
-                <div><label className="text-xs text-gray-500">金額</label><input type="number" className="w-full border rounded p-2" value={formData.amount} onChange={e => setFormData({...formData, amount: Number(e.target.value)})} /></div>
-                
-                {formData.type === 'recurring_yearly' ? (
-                  <div className="flex gap-2">
-                    <div className="flex-1"><label className="text-xs text-gray-500">月份</label><input type="number" min="1" max="12" className="w-full border rounded p-2" value={formData.month} onChange={e => setFormData({...formData, month: Number(e.target.value)})} /></div>
-                    <div className="flex-1"><label className="text-xs text-gray-500">日期</label><input type="number" min="1" max="31" className="w-full border rounded p-2" value={formData.day} onChange={e => setFormData({...formData, day: Number(e.target.value)})} /></div>
+      return (
+          <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
+              <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-sm">
+                  <h3 className="font-bold text-lg mb-4">重設密碼</h3>
+                  <div className="space-y-4">
+                      <input className="w-full border p-2 rounded text-center tracking-widest" placeholder="新密碼" value={pwd} onChange={e => setPwd(e.target.value)} />
+                      <div className="flex gap-2 justify-end pt-2">
+                          <button onClick={() => setShowChangePasswordModal(false)} className="px-4 py-2 bg-gray-100 rounded">取消</button>
+                          <button onClick={() => handleChangePassword(pwd)} disabled={!pwd} className="px-4 py-2 bg-blue-600 text-white rounded font-bold">確認修改</button>
+                      </div>
                   </div>
-                ) : (
-                  <div><label className="text-xs text-gray-500">每月扣數日</label><input type="number" className="w-full border rounded p-2" value={formData.day} onChange={e => setFormData({...formData, day: Number(e.target.value)})} /></div>
-                )}
-             </div>
-             
-             <div className="grid grid-cols-2 gap-3">
-                <div><label className="text-xs text-gray-500">類別</label><select className="w-full border rounded p-2" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>{['樓宇','信用卡','保險','日常','貸款','其他'].map(c => <option key={c}>{c}</option>)}</select></div>
-                <div><label className="text-xs text-gray-500">銀行</label><input className="w-full border rounded p-2" value={formData.bank} onChange={e => setFormData({...formData, bank: e.target.value})} /></div>
-             </div>
-             <div className="flex gap-2 pt-4">
-               <button onClick={() => setShowExpenseModal(false)} className="flex-1 px-4 py-2 bg-gray-100 rounded text-gray-600">取消</button>
-               <button onClick={() => saveExpense(formData)} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">儲存</button>
-             </div>
+              </div>
           </div>
-        </div>
-      </div>
-    );
+      );
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center">載入中...</div>;
@@ -1284,13 +1023,15 @@ export default function App() {
         <div className="text-red-500 mb-4 flex justify-center"><AlertCircle size={48} /></div>
         <h2 className="text-xl font-bold text-gray-800 mb-2">無法登入系統</h2>
         <p className="text-sm text-gray-600 mb-4">{authError}</p>
-        <div className="text-xs bg-gray-100 p-4 rounded text-left overflow-x-auto">
-          請檢查 Firebase 設定或網絡連線。
-        </div>
         <button onClick={() => window.location.reload()} className="mt-6 bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">重新整理</button>
       </div>
     </div>
   );
+
+  // If not logged in app-level auth
+  if (!currentUserRole) {
+      return <LoginScreen />;
+  }
 
   return (
     <div className="flex h-screen bg-gray-100 font-sans text-gray-900">
@@ -1312,7 +1053,11 @@ export default function App() {
         <div className="p-4 border-t bg-gray-50">
           <div className="flex items-center gap-3">
              <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold border-2 border-white shadow ${currentUserRole.color}`}>{currentUserRole.name[0]}</div>
-             <div className="truncate"><div className="font-bold text-sm">{currentUserRole.name}</div><div className="text-xs text-gray-500">{currentUserRole.role==='admin'?'管理員':'成員'}</div></div>
+             <div className="truncate flex-1">
+                 <div className="font-bold text-sm">{currentUserRole.name}</div>
+                 <div className="text-xs text-gray-500">{currentUserRole.role==='admin'?'管理員':'成員'}</div>
+             </div>
+             <button onClick={handleLogout} className="text-gray-400 hover:text-red-500"><LogOut size={16}/></button>
           </div>
         </div>
       </div>
@@ -1376,6 +1121,8 @@ export default function App() {
       <TripWizard />
       {showTripEditModal && editingItem && <PackingMode trip={editingItem}/>}
       {showPrintPreview && renderPrintPreview()}
+      <AddMemberModal />
+      <ChangePasswordModal />
     </div>
   );
 }
