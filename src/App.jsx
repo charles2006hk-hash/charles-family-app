@@ -81,6 +81,8 @@ const firebaseConfig = {
   measurementId: "G-TW5BCHD6YR"
 };
 
+// Initialize Firebase
+// Check if app is already initialized to prevent errors in hot-reload
 let app;
 try {
   app = initializeApp(firebaseConfig);
@@ -190,7 +192,6 @@ export default function App() {
   
   // Auth State
   const [currentUserRole, setCurrentUserRole] = useState(null); // The member logged in
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [loginTargetMember, setLoginTargetMember] = useState(null);
   const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState('');
@@ -226,11 +227,6 @@ export default function App() {
     script.async = true;
     document.head.appendChild(script);
 
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = 'https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css';
-    document.head.appendChild(link);
-
     const style = document.createElement('style');
     style.innerHTML = `
       body { font-family: system-ui, -apple-system, sans-serif; background: #f3f4f6; }
@@ -253,7 +249,6 @@ export default function App() {
         } catch (storageErr) {
             await setPersistence(auth, inMemoryPersistence);
         }
-        
         await signInAnonymously(auth);
       } catch (err) {
         setAuthError(err.message);
@@ -275,7 +270,6 @@ export default function App() {
     const unsubMembers = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'members')), (snap) => {
         const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         if (data.length === 0) {
-            // Seed members
             DEFAULT_MEMBERS_SEED.forEach(async (m) => {
                 await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'members'), {
                     ...m, createdAt: serverTimestamp()
