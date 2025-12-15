@@ -158,7 +158,9 @@ const getLunarInfo = (date) => {
   const special = LUNAR_DATA.find(d => d.day === day);
   if (special) return { dayText: special.text, auspicious: special.ausp };
   
-  const lunarDays = ["初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十", "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十", "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"];
+  const lunarDays = ["初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十", 
+                     "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十",
+                     "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十"];
   const idx = (day - 1) % 30;
   const randAusp = (day % 5 === 0) ? '宜會友' : (day % 7 === 0 ? '忌遠行' : '');
   return { dayText: lunarDays[idx], auspicious: randAusp };
@@ -466,6 +468,7 @@ export default function App() {
       return (
           <div className="h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
              <div className="text-center mb-10">
+                 {/* App Logo */}
                  <div className="w-24 h-24 mx-auto mb-4 rounded-3xl shadow-lg overflow-hidden bg-white">
                      <img src="/app-icon.png" alt="Charles Family" className="w-full h-full object-cover" onError={(e)=>{e.target.style.display='none'; e.target.nextSibling.style.display='flex'}}/>
                      <div className="w-full h-full flex items-center justify-center bg-blue-600 text-white text-5xl font-bold" style={{display: 'none'}}>C</div>
@@ -616,6 +619,7 @@ export default function App() {
         </div>
       );
     }
+
     if (calendarView === 'day') {
       const hours = Array.from({length: 18}, (_, i) => i + 6); // 06:00 to 23:00
       const dStr = formatDate(currentDate);
@@ -1250,53 +1254,6 @@ export default function App() {
         </div>
       </div>
     );
-  };
-
-  const AddMemberModal = () => {
-      if(!showAddMemberModal) return null;
-      const [name, setName] = useState('');
-      const [role, setRole] = useState('member');
-      const [color, setColor] = useState('bg-gray-100 text-gray-800 border-gray-200');
-
-      return (
-          <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
-              <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-sm">
-                  <h3 className="font-bold text-lg mb-4">新增家庭成員</h3>
-                  <div className="space-y-4">
-                      <input className="w-full border p-2 rounded" placeholder="名稱 (例如: 爺爺)" value={name} onChange={e => setName(e.target.value)} />
-                      <select className="w-full border p-2 rounded" value={role} onChange={e => setRole(e.target.value)}>
-                          <option value="member">一般成員</option>
-                          <option value="admin">管理員</option>
-                      </select>
-                      <div className="text-xs text-gray-500">預設密碼為 888888</div>
-                      <div className="flex gap-2 justify-end pt-2">
-                          <button onClick={() => setShowAddMemberModal(false)} className="px-4 py-2 bg-gray-100 rounded">取消</button>
-                          <button onClick={() => handleAddMember({name, role, color})} disabled={!name} className="px-4 py-2 bg-blue-600 text-white rounded font-bold">確認新增</button>
-                      </div>
-                  </div>
-              </div>
-          </div>
-      );
-  };
-
-  const ChangePasswordModal = () => {
-      if(!showChangePasswordModal) return null;
-      const [pwd, setPwd] = useState('');
-
-      return (
-          <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4">
-              <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-sm">
-                  <h3 className="font-bold text-lg mb-4">重設密碼</h3>
-                  <div className="space-y-4">
-                      <input className="w-full border p-2 rounded text-center tracking-widest" placeholder="新密碼" value={pwd} onChange={e => setPwd(e.target.value)} />
-                      <div className="flex gap-2 justify-end pt-2">
-                          <button onClick={() => setShowChangePasswordModal(false)} className="px-4 py-2 bg-gray-100 rounded">取消</button>
-                          <button onClick={() => handleChangePassword(pwd)} disabled={!pwd} className="px-4 py-2 bg-blue-600 text-white rounded font-bold">確認修改</button>
-                      </div>
-                  </div>
-              </div>
-          </div>
-      );
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center">載入中...</div>;
