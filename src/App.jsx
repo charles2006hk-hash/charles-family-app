@@ -27,48 +27,67 @@ import {
   Trash2, 
   User, 
   Bell, 
-  Menu,
-  X,
-  MapPin,
-  Sun,
-  Share,
-  Clock,
-  Edit2,
-  Users,
-  Train,
-  Ship,
-  Car,
-  ChevronLeft,
-  ChevronRight,
-  Info,
-  Luggage,
-  Briefcase,
-  Coffee,
-  AlertCircle,
-  FileText,
-  Printer,
-  Save,
-  CheckSquare,
-  Square,
-  Weight,
-  Palette,
-  Home,
-  Shield,
-  Zap,
-  DollarSign,
-  Hotel,
-  Bus,
-  PieChart,
-  TrendingUp,
-  Wallet
+  Menu, 
+  X, 
+  MapPin, 
+  Sun, 
+  Share, 
+  Clock, 
+  Edit2, 
+  Users, 
+  Train, 
+  Ship, 
+  Car, 
+  ChevronLeft, 
+  ChevronRight, 
+  Info, 
+  Luggage, 
+  Briefcase, 
+  Coffee, 
+  AlertCircle, 
+  FileText, 
+  Printer, 
+  Save, 
+  CheckSquare, 
+  Square, 
+  Weight, 
+  Palette, 
+  Home, 
+  Shield, 
+  Zap, 
+  DollarSign, 
+  Hotel, 
+  Bus, 
+  PieChart, 
+  TrendingUp, 
+  Wallet 
 } from 'lucide-react';
 
-// --- Firebase Configuration ---
-const firebaseConfig = JSON.parse(__firebase_config);
-const app = initializeApp(firebaseConfig);
+// --- 1. Firebase Initialization (Direct Config) ---
+// 修正：直接填入您的 Firebase 設定，不再讀取 __firebase_config 變數
+const firebaseConfig = {
+  apiKey: "AIzaSyCSX2xjZB7zqKvW9_ao007doKchwTCxGVs",
+  authDomain: "charles-family-app.firebaseapp.com",
+  projectId: "charles-family-app",
+  storageBucket: "charles-family-app.firebasestorage.app",
+  messagingSenderId: "702364504318",
+  appId: "1:702364504318:web:751a0e3ef50d7d1e4c15af",
+  measurementId: "G-TW5BCHD6YR"
+};
+
+// Initialize Firebase
+// Check if app is already initialized to prevent errors in hot-reload
+let app;
+try {
+  app = initializeApp(firebaseConfig);
+} catch (e) {
+  // Ignore duplicate app initialization error
+}
+
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+// 修正：直接設定 appId，確保資料庫路徑一致
+const appId = 'charles-family-app';
 
 // --- Constants & Data ---
 
@@ -153,6 +172,7 @@ const getDaysDiff = (start, end) => {
 export default function App() {
   const [user, setUser] = useState(null);
   const [activeTab, setActiveTab] = useState('calendar');
+  const [authError, setAuthError] = useState(null);
   
   // Data State
   const [members, setMembers] = useState([
@@ -186,15 +206,22 @@ export default function App() {
   // Auth & Sync
   useEffect(() => {
     const initAuth = async () => {
-      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        await signInWithCustomToken(auth, __initial_auth_token);
-      } else {
-        await signInAnonymously(auth);
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (err) {
+        console.error("Auth Error:", err);
+        setAuthError(err.message);
+        setLoading(false);
       }
     };
     initAuth();
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
+      if(u) setAuthError(null);
       setLoading(false);
     });
     return () => unsubscribe();
@@ -203,7 +230,9 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     const unsubEvents = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'events')), 
-      (snap) => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+      (snap) => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      (err) => console.error("Events Sync Error:", err)
+    );
     
     const unsubExpenses = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses')), 
       (snap) => {
@@ -212,10 +241,14 @@ export default function App() {
         if (data.length === 0) {
           INITIAL_EXPENSES.forEach(e => addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses'), { ...e, createdAt: serverTimestamp() }));
         }
-      });
+      },
+      (err) => console.error("Expenses Sync Error:", err)
+    );
 
     const unsubTrips = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'trips')), 
-      (snap) => setTrips(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+      (snap) => setTrips(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      (err) => console.error("Trips Sync Error:", err)
+    );
 
     return () => { unsubEvents(); unsubExpenses(); unsubTrips(); };
   }, [user]);
@@ -225,12 +258,11 @@ export default function App() {
   const getLuggageEstimate = (trip) => {
     const days = getDaysDiff(trip.startDate, trip.endDate);
     const personCount = trip.participants.length;
-    let totalWeight = Math.round(personCount * (3 + (days * 1.2))); // Base calc
+    let totalWeight = Math.round(personCount * (3 + (days * 1.2))); 
     
-    // Logic adjustments based on new inputs
-    if (trip.hotelStar && trip.hotelStar < 3) totalWeight += personCount * 1; // Need towels/toiletries
-    if (trip.hotelType === 'Resort') totalWeight += personCount * 1; // Swimwear etc
-    if (trip.destination.includes('日本')) totalWeight += 5; // Shopping space
+    if (trip.hotelStar && trip.hotelStar < 3) totalWeight += personCount * 1; 
+    if (trip.hotelType === 'Resort') totalWeight += personCount * 1; 
+    if (trip.destination.includes('日本')) totalWeight += 5; 
 
     let advice = "";
     if (totalWeight < 10) advice = "1個登機箱 (Carry-on)";
@@ -367,7 +399,6 @@ export default function App() {
                 <button onClick={() => setShowPrintPreview(null)} className="bg-gray-300 px-4 py-2 rounded hover:bg-gray-400">關閉</button>
               </div>
             </div>
-            {/* A4 Report Content */}
             <div className="p-10 bg-white text-gray-800 print:p-0">
                <div className="border-b-2 border-blue-600 pb-4 mb-8 flex justify-between items-end">
                   <div>
@@ -379,7 +410,6 @@ export default function App() {
                     <div className="text-gray-600">{trip.startDate} 至 {trip.endDate}</div>
                   </div>
                 </div>
-                {/* Details */}
                 <div className="grid grid-cols-2 gap-8 mb-8">
                 <div className="bg-gray-50 p-6 rounded-lg border">
                   <h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Info size={20}/> 行程概覽</h3>
@@ -404,7 +434,6 @@ export default function App() {
                   </ul>
                 </div>
               </div>
-              {/* Individuals */}
               <div className="grid grid-cols-2 gap-6">
                  {Object.entries(trip.packingList?.individual || {}).map(([uid, items]) => {
                      const m = members.find(mem => mem.id === uid);
@@ -599,7 +628,6 @@ export default function App() {
      // Calculate Dashboard Stats
      const monthlyExpenses = expenses.filter(e => {
        if (e.type === 'recurring_monthly') return true;
-       // Include yearly if month matches
        if (e.type === 'recurring_yearly' && e.month === (currentMonthIndex + 1)) return true;
        return false;
      });
@@ -1215,6 +1243,19 @@ export default function App() {
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center">載入中...</div>;
+  if (authError) return (
+    <div className="h-screen flex flex-col items-center justify-center p-8 bg-gray-50 text-center">
+      <div className="bg-white p-8 rounded-xl shadow-lg border border-red-100 max-w-md">
+        <div className="text-red-500 mb-4 flex justify-center"><AlertCircle size={48} /></div>
+        <h2 className="text-xl font-bold text-gray-800 mb-2">無法登入系統</h2>
+        <p className="text-sm text-gray-600 mb-4">{authError}</p>
+        <div className="text-xs bg-gray-100 p-4 rounded text-left overflow-x-auto">
+          請檢查 Firebase 設定或網絡連線。
+        </div>
+        <button onClick={() => window.location.reload()} className="mt-6 bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">重新整理</button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="flex h-screen bg-gray-100 font-sans text-gray-900">
@@ -1251,7 +1292,6 @@ export default function App() {
         <main className="flex-1 overflow-y-auto p-2 md:p-6 bg-gray-50">
           {activeTab === 'calendar' && renderCalendar()}
           {activeTab === 'expenses' && renderExpenses()}
-          
           {activeTab === 'travel' && (
             <div className="space-y-6">
                <div className="flex justify-between items-center">
@@ -1285,7 +1325,6 @@ export default function App() {
                </div>
             </div>
           )}
-
           {activeTab === 'settings' && renderSettings()}
         </main>
 
