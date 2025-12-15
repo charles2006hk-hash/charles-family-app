@@ -27,70 +27,59 @@ import {
   Trash2, 
   User, 
   Bell, 
-  Menu,
-  X,
-  MapPin,
-  Sun,
-  Share,
-  Clock,
-  Edit2,
-  Users,
-  Train,
-  Ship,
-  Car,
-  ChevronLeft,
-  ChevronRight,
-  Info,
-  Luggage,
-  Briefcase,
-  Coffee,
-  AlertCircle,
-  FileText,
-  Printer,
-  Save,
-  CheckSquare,
-  Square,
-  Weight,
-  Palette,
-  Home,
-  Shield,
-  Zap,
-  DollarSign,
-  Hotel,
-  Bus,
-  PieChart,
-  TrendingUp,
-  Wallet
+  Menu, 
+  X, 
+  MapPin, 
+  Sun, 
+  Share, 
+  Clock, 
+  Edit2, 
+  Users, 
+  Train, 
+  Ship, 
+  Car, 
+  ChevronLeft, 
+  ChevronRight, 
+  Info, 
+  Luggage, 
+  Briefcase, 
+  Coffee, 
+  AlertCircle, 
+  FileText, 
+  Printer, 
+  Save, 
+  CheckSquare, 
+  Square, 
+  Weight, 
+  Palette, 
+  Home, 
+  Shield, 
+  Zap, 
+  DollarSign, 
+  Hotel, 
+  Bus, 
+  PieChart, 
+  TrendingUp, 
+  Wallet 
 } from 'lucide-react';
 
-// --- 1. Firebase Initialization (Dual Environment Support) ---
-// This logic allows the code to run in both this preview environment AND your local/Vercel environment.
+// --- 1. Firebase Initialization (Direct Config) ---
 
-let firebaseConfig;
-let appId = 'default-app-id';
-
-// Check if we are in the preview environment (variables provided globally)
-if (typeof __firebase_config !== 'undefined') {
-  firebaseConfig = JSON.parse(__firebase_config);
-  if (typeof __app_id !== 'undefined') appId = __app_id;
-} else {
-  // We are in Vercel / Local Vite environment
-  // Ensure you set these variables in your .env file or Vercel Settings
-  firebaseConfig = {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-    appId: import.meta.env.VITE_FIREBASE_APP_ID
-  };
-  appId = 'charles-family-app'; // Fixed ID for local/prod
-}
+const firebaseConfig = {
+  apiKey: "AIzaSyCSX2xjZB7zqKvW9_ao007doKchwTCxGVs",
+  authDomain: "charles-family-app.firebaseapp.com",
+  projectId: "charles-family-app",
+  storageBucket: "charles-family-app.firebasestorage.app",
+  messagingSenderId: "702364504318",
+  appId: "1:702364504318:web:751a0e3ef50d7d1e4c15af",
+  measurementId: "G-TW5BCHD6YR"
+};
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const appId = 'charles-family-app';
 
 // --- Constants & Data ---
 
@@ -175,6 +164,7 @@ const getDaysDiff = (start, end) => {
 export default function App() {
   const [user, setUser] = useState(null);
   const [activeTab, setActiveTab] = useState('calendar');
+  const [authError, setAuthError] = useState(null);
   
   // Data State
   const [members, setMembers] = useState([
@@ -208,16 +198,19 @@ export default function App() {
   // Auth & Sync
   useEffect(() => {
     const initAuth = async () => {
-      // Prioritize custom token if available (Preview env), else anonymous (Dev/Vercel)
-      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        await signInWithCustomToken(auth, __initial_auth_token);
-      } else {
+      try {
+        // Direct anonymous sign in
         await signInAnonymously(auth);
+      } catch (err) {
+        console.error("Auth Error:", err);
+        setAuthError(err.message);
+        setLoading(false);
       }
     };
     initAuth();
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setUser(u);
+      if(u) setAuthError(null);
       setLoading(false);
     });
     return () => unsubscribe();
@@ -226,7 +219,9 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     const unsubEvents = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'events')), 
-      (snap) => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+      (snap) => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      (err) => console.error("Events Sync Error:", err)
+    );
     
     const unsubExpenses = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses')), 
       (snap) => {
@@ -235,10 +230,14 @@ export default function App() {
         if (data.length === 0) {
           INITIAL_EXPENSES.forEach(e => addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses'), { ...e, createdAt: serverTimestamp() }));
         }
-      });
+      },
+      (err) => console.error("Expenses Sync Error:", err)
+    );
 
     const unsubTrips = onSnapshot(query(collection(db, 'artifacts', appId, 'users', user.uid, 'trips')), 
-      (snap) => setTrips(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+      (snap) => setTrips(snap.docs.map(d => ({ id: d.id, ...d.data() }))),
+      (err) => console.error("Trips Sync Error:", err)
+    );
 
     return () => { unsubEvents(); unsubExpenses(); unsubTrips(); };
   }, [user]);
@@ -1233,6 +1232,19 @@ export default function App() {
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center">載入中...</div>;
+  if (authError) return (
+    <div className="h-screen flex flex-col items-center justify-center p-8 bg-gray-50 text-center">
+      <div className="bg-white p-8 rounded-xl shadow-lg border border-red-100 max-w-md">
+        <div className="text-red-500 mb-4 flex justify-center"><AlertCircle size={48} /></div>
+        <h2 className="text-xl font-bold text-gray-800 mb-2">無法登入系統</h2>
+        <p className="text-sm text-gray-600 mb-4">{authError}</p>
+        <div className="text-xs bg-gray-100 p-4 rounded text-left overflow-x-auto">
+          請檢查 Firebase 設定或網絡連線。
+        </div>
+        <button onClick={() => window.location.reload()} className="mt-6 bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">重新整理</button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="flex h-screen bg-gray-100 font-sans text-gray-900">
