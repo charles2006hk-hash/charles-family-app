@@ -6,6 +6,7 @@ import {
   onAuthStateChanged,
   setPersistence,
   inMemoryPersistence,
+  browserLocalPersistence
 } from 'firebase/auth';
 import { 
   getFirestore, 
@@ -74,7 +75,7 @@ const HK_HOLIDAYS = {
   '2026-09-26': '中秋翌日', '2026-10-18': '重陽節', '2026-12-25': '聖誕節', '2026-12-26': '拆禮物日'
 };
 
-const LUNAR_DATA = [{ day: 1, text: '初一', ausp: '宜祭祀 祈福' }, { day: 15, text: '十五', ausp: '宜祭祀' }];
+const LUNAR_DATA = [{ day: 1, text: '初一', ausp: '宜祭祀 祈福' }, { day: 15, text: '十五', ausp: '宜祭祀' }, { day: 2, text: '初二', ausp: '宜出行' }, { day: 8, text: '初八', ausp: '諸事不宜' }, { day: 16, text: '十六', ausp: '宜開市' }, { day: 23, text: '廿三', ausp: '宜大掃除' }];
 
 const INITIAL_EXPENSES = [
   { name: '大埔帝欣苑 (供款)', amount: 19038, day: 15, category: '樓宇', bank: 'DBS', type: 'recurring_monthly' }, { name: '大埔帝欣苑 (管理費)', amount: 2500, day: 15, category: '樓宇', bank: 'DBS', type: 'recurring_monthly' }, { name: '九龍農圃道 (供款)', amount: 26207, day: 15, category: '樓宇', bank: 'DBS', type: 'recurring_monthly' }, { name: '九龍農圃道 (管理費)', amount: 4200, day: 15, category: '樓宇', bank: 'DBS', type: 'recurring_monthly' }, { name: '大埔太湖花園7座 (供款)', amount: 13923, day: 15, category: '樓宇', bank: 'DBS', type: 'recurring_monthly' }, { name: '大埔太湖花園5座 (供款)', amount: 12668, day: 15, category: '樓宇', bank: '大新', type: 'recurring_monthly' }, { name: '科學園嘉熙 (供款)', amount: 10891, day: 15, category: '樓宇', bank: '大新', type: 'recurring_monthly' }, { name: '譚公道 (供款)', amount: 10891, day: 15, category: '樓宇', bank: '恆生', type: 'recurring_monthly' }, { name: '私人貸款 (Autopay)', amount: 13995, day: 15, category: '貸款', bank: '大新', type: 'recurring_monthly' }, { name: 'Citibank Club Master', day: 21, category: '信用卡', bank: 'Citibank', type: 'recurring_monthly' }, { name: 'DBS Visa (Target)', day: 10, amount: 50000, category: '信用卡', bank: 'DBS', type: 'recurring_monthly' }, { name: 'AXA 醫療 (Jason)', amount: 2384.83, month: 2, day: 21, category: '保險', type: 'recurring_yearly' }, { name: 'AXA 人壽 (Charles)', amount: 106739.68, month: 10, day: 22, category: '保險', type: 'recurring_yearly' }, { name: '農圃車位租金', amount: 3600, day: 1, category: '日常', bank: 'HSBC', type: 'recurring_monthly' }, { name: '農圃水費', amount: 1000, day: 1, category: '日常', type: 'recurring_monthly' }
@@ -113,7 +114,7 @@ const calculatePackingProgress = (list) => {
     return total === 0 ? 0 : Math.round((packed / total) * 100);
 };
 
-// Safe Avatar Helper (Defined globally to avoid ReferenceErrors)
+// --- Safe Avatar Helper (Global) ---
 const SafeAvatar = ({ avatar, name, className = "" }) => {
     if (avatar && typeof avatar === 'string' && avatar.startsWith('data:')) {
         return <img src={avatar} alt={name || 'User'} className={`w-full h-full object-cover ${className}`} />;
@@ -121,7 +122,7 @@ const SafeAvatar = ({ avatar, name, className = "" }) => {
     return <span className={className}>{avatar || '👤'}</span>;
 };
 
-// --- 3. View Components (DEFINED OUTSIDE APP TO AVOID REFERENCE ERRORS) ---
+// --- 3. View Components (DEFINED OUTSIDE APP) ---
 
 const Tooltip = ({ hoveredEvent, categories, members }) => {
     if (!hoveredEvent) return null;
@@ -226,7 +227,7 @@ const CalendarView = ({ currentDate, calendarView, events, trips, categories, me
       return ( <div className="bg-white rounded-lg shadow h-full flex flex-col">{header}<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 p-4 overflow-y-auto">{months.map(m => ( <div key={m} className="border rounded p-2 hover:shadow-md cursor-pointer bg-white" onClick={() => { setCurrentDate(new Date(year, m, 1)); setCalendarView('month'); }}><div className="text-center font-bold mb-2 bg-gray-50 rounded py-1">{m+1}月</div><div className="grid grid-cols-7 gap-1 text-[8px] text-center text-gray-400">{['日','一','二','三','四','五','六'].map(d => <div key={d} className={d==='日'||d==='六'?'text-red-400':''}>{d}</div>)}{Array.from({length: new Date(year, m, 1).getDay()}).map((_, i) => <div key={`e-${i}`}></div>)}{Array.from({length: new Date(year, m+1, 0).getDate()}).map((_, i) => { const dStr = formatDate(new Date(year, m, i+1)); const isHol = HK_HOLIDAYS[dStr]; const hasTrip = trips.some(t => isDateInRange(dStr, t.startDate, t.endDate)); return <div key={i} className={`rounded-full h-5 w-5 flex items-center justify-center ${isHol ? 'bg-red-100 text-red-600 font-bold' : hasTrip ? 'bg-blue-100 text-blue-600' : 'hover:bg-gray-100'}`}>{i+1}</div>; })}</div></div>))}</div></div>);
     }
     
-    // --- UPDATED DAY VIEW ---
+    // --- DAY VIEW (Split Layout) ---
     if (calendarView === 'day') {
       const miniDays = [];
       for (let i = 0; i < firstDay; i++) miniDays.push(<div key={`empty-${i}`} className="h-10"></div>);
@@ -484,7 +485,32 @@ const CalendarView = ({ currentDate, calendarView, events, trips, categories, me
              <button onClick={() => setShowAddMemberModal(true)} className="text-sm bg-blue-600 text-white px-3 py-1 rounded flex items-center gap-1 hover:bg-blue-700"><Plus size={14}/> 新增成員</button>
            )}
         </div>
-        <div className="space-y-2">{members.map(m => (<div key={m.id} className="flex items-center justify-between p-3 bg-gray-50 rounded"><div className="flex items-center gap-3"><div className={`w-10 h-10 rounded-full flex items-center justify-center text-2xl overflow-hidden ${m.color}`}><SafeAvatar avatar={m.avatar} name={m.name}/></div><div><div className="font-bold text-gray-800">{m.name}</div><div className="text-xs text-gray-500">{m.role === 'admin' ? '管理員' : '一般成員'}</div></div></div>{currentUserRole.role === 'admin' && (<div className="flex gap-2"><button onClick={() => { setTargetMemberId(m.id); setShowChangePasswordModal(true); }} className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded text-gray-600 hover:bg-gray-100 flex items-center gap-1"><Key size={12}/> 重設密碼</button></div>)}</div>))}</div>
+        <div className="space-y-2">{members.map(m => {
+             return (
+             <div key={m.id} className="flex items-center justify-between p-3 bg-gray-50 rounded">
+                <div className="flex items-center gap-3">
+                   <div className={`w-10 h-10 rounded-full flex items-center justify-center text-2xl overflow-hidden ${m.color}`}>
+                       <SafeAvatar avatar={m.avatar} name={m.name}/>
+                   </div>
+                   <div>
+                     <div className="font-bold text-gray-800">{m.name}</div>
+                     <div className="text-xs text-gray-500">{m.role === 'admin' ? '管理員' : '一般成員'}</div>
+                   </div>
+                </div>
+                
+                {currentUserRole.role === 'admin' && (
+                  <div className="flex gap-2">
+                     <button 
+                       onClick={() => { setTargetMemberId(m.id); setShowChangePasswordModal(true); }}
+                       className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded text-gray-600 hover:bg-gray-100 flex items-center gap-1"
+                     >
+                        <Key size={12}/> 重設密碼
+                     </button>
+                  </div>
+                )}
+             </div>
+          )})}
+        </div>
       </section>
 
       {/* Category Management */}
@@ -535,7 +561,7 @@ const CalendarView = ({ currentDate, calendarView, events, trips, categories, me
     };
 
     return (
-      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"><div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6"><h3 className="text-lg font-bold mb-4">{editingItem?.id ? '修改開支' : '新增開支'}</h3><div className="space-y-3"><div><label className="text-xs text-gray-500">項目名稱</label><input list="expense-names" className="w-full border rounded p-2" value={formData.name} onChange={handleNameChange} placeholder="例如：大埔帝欣苑..."/><datalist id="expense-names">{historicalNames.map((n, i) => <option key={i} value={n}/>)}</datalist></div><div><label className="text-xs text-gray-500 mb-1 block">頻率</label><div className="flex gap-2"><button onClick={() => setFormData({...formData, type: 'recurring_monthly'})} className={`flex-1 py-1 text-xs rounded border ${formData.type === 'recurring_monthly' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'bg-white text-gray-600'}`}>每月 (Monthly)</button><button onClick={() => setFormData({...formData, type: 'recurring_yearly'})} className={`flex-1 py-1 text-xs rounded border ${formData.type === 'recurring_yearly' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'bg-white text-gray-600'}`}>每年 (Yearly)</button></div></div><div className="grid grid-cols-2 gap-3"><div><label className="text-xs text-gray-500">金額</label><input type="number" className="w-full border rounded p-2" value={formData.amount} onChange={e => setFormData({...formData, amount: Number(e.target.value)})} /></div>{formData.type === 'recurring_yearly' ? (<div className="flex gap-2"><div className="flex-1"><label className="text-xs text-gray-500">月份</label><input type="number" min="1" max="12" className="w-full border rounded p-2" value={formData.month} onChange={e => setFormData({...formData, month: Number(e.target.value)})}/><input type="number" placeholder="日" className="w-1/2 border rounded p-2" value={formData.day} onChange={e => setFormData({...formData, day: Number(e.target.value)})}/></div></div>) : (<div><label className="text-xs text-gray-500">每月扣數日</label><input type="number" className="w-full border rounded p-2" value={formData.day} onChange={e => setFormData({...formData, day: Number(e.target.value)})}/></div>)}</div><div className="grid grid-cols-2 gap-3"><div><label className="text-xs text-gray-500">類別</label><select className="w-full border rounded p-2" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>{['樓宇','信用卡','保險','日常','貸款','其他'].map(c => <option key={c}>{c}</option>)}</select></div><div><label className="text-xs text-gray-500">銀行</label><input className="w-full border rounded p-2" value={formData.bank} onChange={e => setFormData({...formData, bank: e.target.value})}/></div></div><div className="flex gap-2 pt-4">{formData?.id && <button onClick={() => onDelete('expenses', formData.id)} className="px-4 py-2 text-red-500 border rounded"><Trash2/></button>}<button onClick={() => setShowExpenseModal(false)} className="flex-1 px-4 py-2 bg-gray-100 rounded">取消</button><button onClick={() => saveExpense(formData)} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded">儲存</button></div></div></div></div>
+      <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"><div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6"><h3 className="text-lg font-bold mb-4">{editingItem?.id ? '修改開支' : '新增開支'}</h3><div className="space-y-3"><div><label className="text-xs text-gray-500">項目名稱</label><input list="expense-names" className="w-full border rounded p-2" value={formData.name} onChange={handleNameChange} placeholder="例如：大埔帝欣苑..."/><datalist id="expense-names">{historicalNames.map((n, i) => <option key={i} value={n}/>)}</datalist></div><div><label className="text-xs text-gray-500 mb-1 block">頻率</label><div className="flex gap-2"><button onClick={() => setFormData({...formData, type: 'recurring_monthly'})} className={`flex-1 py-1 text-xs rounded border ${formData.type === 'recurring_monthly' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'bg-white text-gray-600'}`}>每月 (Monthly)</button><button onClick={() => setFormData({...formData, type: 'recurring_yearly'})} className={`flex-1 py-1 text-xs rounded border ${formData.type === 'recurring_yearly' ? 'bg-blue-50 border-blue-500 text-blue-700 font-bold' : 'bg-white text-gray-600'}`}>每年 (Yearly)</button></div></div><div className="grid grid-cols-2 gap-3"><div><label className="text-xs text-gray-500">金額</label><input type="number" className="w-full border rounded p-2" value={formData.amount} onChange={e => setFormData({...formData, amount: Number(e.target.value)})} /></div>{formData.type === 'recurring_yearly' ? (<div className="flex gap-2"><div className="flex-1"><label className="text-xs text-gray-500">月份</label><input type="number" min="1" max="12" className="w-full border rounded p-2" value={formData.month} onChange={e => setFormData({...formData, month: Number(e.target.value)})}/><input type="number" placeholder="日" className="w-1/2 border rounded p-2" value={formData.day} onChange={e => setFormData({...formData, day: Number(e.target.value)})}/></div></div>) : (<div><label className="text-xs text-gray-500">每月扣數日</label><input type="number" className="w-full border rounded p-2" value={formData.day} onChange={e => setFormData({...formData, day: Number(e.target.value)})}/></div>)}</div><div className="grid grid-cols-2 gap-3"><div><label className="text-xs text-gray-500">類別</label><select className="w-full border rounded p-2" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>{['樓宇','信用卡','保險','日常','貸款','其他'].map(c => <option key={c}>{c}</option>)}</select></div><div><label className="text-xs text-gray-500">銀行</label><input className="w-full border rounded p-2" value={formData.bank} onChange={e => setFormData({...formData, bank: e.target.value})}/></div></div><div className="flex gap-2 pt-4">{formData?.id && <button onClick={() => onDelete('expenses', formData.id)} className="px-4 py-2 text-red-500 border rounded"><Trash2/></button>}<button onClick={onClose} className="flex-1 px-4 py-2 bg-gray-100 rounded">取消</button><button onClick={() => saveExpense(formData)} className="flex-1 px-4 py-2 bg-blue-600 text-white rounded">儲存</button></div></div></div></div>
     );
   };
 
@@ -592,7 +618,8 @@ const CalendarView = ({ currentDate, calendarView, events, trips, categories, me
                     </div>
                 )}
                   <div className="text-xs text-gray-500 mb-4">預設密碼為 888888</div>
-                  <div className="flex gap-2 justify-end"><button onClick={onClose} className="px-4 py-2 bg-gray-100 rounded">取消</button><button onClick={() => onAdd({name, role, avatar, permissions: role === 'admin' ? ['calendar','expenses','travel','settings'] : Object.keys(permissions).filter(k=>permissions[k]), color: 'bg-gray-100 text-gray-800'})} disabled={!name} className="px-4 py-2 bg-blue-600 text-white rounded font-bold">確認新增</button></div>
+                  <div className="flex gap-2 justify-end"><button onClick={() => onAdd({name, role, avatar, permissions: role === 'admin' ? ['calendar','expenses','travel','settings'] : Object.keys(permissions).filter(k=>permissions[k]), color: 'bg-gray-100 text-gray-800'})} disabled={!name} className="px-4 py-2 bg-blue-600 text-white rounded font-bold">確認新增</button></div>
+                  <button onClick={onClose} className="w-full mt-2 text-gray-400 text-xs">取消</button>
               </div>
           </div>
       );
@@ -602,6 +629,18 @@ const CalendarView = ({ currentDate, calendarView, events, trips, categories, me
       if(!isOpen) return null;
       const [pwd, setPwd] = useState('');
       return (<div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4"><div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-sm"><h3 className="font-bold text-lg mb-4">重設密碼</h3><input className="w-full border p-2 rounded text-center tracking-widest mb-4" placeholder="新密碼" value={pwd} onChange={e => setPwd(e.target.value)} /><div className="flex gap-2 justify-end"><button onClick={onClose} className="px-4 py-2 bg-gray-100 rounded">取消</button><button onClick={() => onConfirm(pwd)} disabled={!pwd} className="px-4 py-2 bg-blue-600 text-white rounded font-bold">確認修改</button></div></div></div>);
+  };
+
+  const PrintPreview = ({ trip, onClose }) => {
+    if (!trip) return null;
+    const estimate = getLuggageEstimate(trip);
+    return (<div className="fixed inset-0 bg-gray-800/90 z-[100] overflow-y-auto"><div className="min-h-screen flex items-center justify-center p-4"><div className="bg-white w-full max-w-4xl min-h-[80vh] rounded shadow-2xl overflow-hidden flex flex-col"><div className="bg-gray-100 p-4 border-b flex justify-between items-center print:hidden"><h3 className="font-bold flex items-center gap-2"><Printer/> 報告預覽</h3><div className="flex gap-2"><button onClick={() => window.print()} className="bg-blue-600 text-white px-4 py-2 rounded flex items-center gap-2 hover:bg-blue-700"><Printer size={16}/> 列印報告</button><button onClick={onClose} className="bg-gray-300 px-4 py-2 rounded hover:bg-gray-400">關閉</button></div></div><div className="p-10 bg-white text-gray-800 print:p-0"><div className="border-b-2 border-blue-600 pb-4 mb-8 flex justify-between items-end"><div><h1 className="text-3xl font-bold text-blue-900 mb-2">旅行行程與執行李報告</h1><div className="text-gray-500">Charles Family App • 自動生成</div></div><div className="text-right"><div className="text-2xl font-bold">{trip.destination}</div><div className="text-gray-600">{trip.startDate} 至 {trip.endDate}</div></div></div><div className="grid grid-cols-2 gap-8 mb-8"><div className="bg-gray-50 p-6 rounded-lg border"><h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Info size={20}/> 行程概覽</h3><div className="space-y-2"><div className="flex justify-between border-b pb-1"><span>天數</span> <span className="font-bold">{getDaysDiff(trip.startDate, trip.endDate)} 天</span></div><div className="flex justify-between border-b pb-1"><span>交通</span> <span className="font-bold">{trip.arrivalType} ({trip.arrivalDetail})</span></div><div className="flex justify-between border-b pb-1"><span>當地</span> <span className="font-bold">{trip.localTransport}</span></div><div className="flex justify-between border-b pb-1"><span>住宿</span> <span className="font-bold">{trip.hotelStar}星 ({trip.hotelType})</span></div><div className="flex justify-between border-b pb-1"><span>人數</span> <span className="font-bold">{trip.participants.length} 人</span></div><div className="flex justify-between pt-2"><span className="flex items-center gap-1"><Weight size={16}/> 預估重量</span> <span className="font-bold text-blue-600">{estimate.totalWeight} kg</span></div></div></div><div className="bg-orange-50 p-6 rounded-lg border border-orange-100"><h3 className="font-bold text-lg mb-4 flex items-center gap-2"><Luggage size={20}/> 共用物品清單</h3><ul className="list-disc pl-5 space-y-1">{trip.packingList?.shared?.map((item, i) => (<li key={i} className="text-sm">{item.name} <span className="text-gray-400">x{item.qty}</span></li>))}</ul></div></div></div></div></div></div>);
+  };
+
+  const PackingMode = ({ trip, onClose, onToggleItem, members }) => {
+     const estimate = getLuggageEstimate(trip);
+     const progress = calculatePackingProgress(trip.packingList);
+     return (<div className="fixed inset-0 bg-white z-50 flex flex-col"><div className="bg-blue-600 text-white p-4 flex justify-between items-center shadow-md"><div><h2 className="text-xl font-bold flex items-center gap-2"><Briefcase/> 執行李模式: {trip.destination}</h2><div className="text-blue-100 text-sm mt-1">{trip.startDate} 出發 • 完成度 {progress}%</div></div><button onClick={onClose} className="bg-blue-700 p-2 rounded hover:bg-blue-800"><X/></button></div><div className="flex-1 overflow-hidden flex flex-col md:flex-row"><div className="w-full md:w-80 bg-gray-50 p-6 border-r overflow-y-auto"><div className="bg-white p-4 rounded-xl shadow-sm mb-6"><h3 className="text-gray-500 text-xs font-bold uppercase mb-2">AI 智能分析</h3><div className="space-y-4"><div><div className="flex justify-between text-sm mb-1"><span>預估總重</span> <span className="font-bold">{estimate.totalWeight} kg</span></div><div className="w-full bg-gray-200 rounded-full h-2"><div className="bg-blue-500 h-2 rounded-full" style={{width: `${Math.min(estimate.totalWeight, 50)*2}%`}}></div></div></div><div className="bg-blue-50 p-3 rounded text-sm text-blue-800 border border-blue-100"><div className="font-bold mb-1 flex items-center gap-1"><Luggage size={14}/> 建議</div>{estimate.advice}</div></div></div><div className="flex-1 overflow-y-auto p-6 md:p-10"><div className="mb-8"><h3 className="font-bold text-xl mb-4 text-orange-600 flex items-center gap-2">共用物品</h3><div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{trip.packingList?.shared?.map((item, i) => (<div key={i} onClick={() => onToggleItem(trip, 'shared', i)} className={`p-3 rounded border cursor-pointer flex items-center gap-3 transition-all ${item.packed ? 'bg-green-50 border-green-200 opacity-60' : 'bg-white hover:border-blue-300'}`}>{item.packed ? <CheckSquare className="text-green-500"/> : <Square className="text-gray-300"/>}<div className="flex-1">{item.name}</div><span className="text-xs bg-gray-100 px-2 py-1 rounded">x{item.qty}</span></div>))}</div></div>{Object.entries(trip.packingList?.individual || {}).map(([uid, items]) => { const m = members.find(mem => mem.id === uid); if(!m) return null; return (<div key={uid} className="mb-8"><h3 className={`font-bold text-xl mb-4 flex items-center gap-2 p-2 rounded w-fit ${m.color}`}><User size={20}/> {m.name}</h3><div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{items.map((item, i) => (<div key={i} onClick={() => onToggleItem(trip, 'individual', i, uid)} className={`p-3 rounded border cursor-pointer flex items-center gap-3 transition-all ${item.packed ? 'bg-green-50 border-green-200 opacity-60' : 'bg-white hover:border-blue-300'}`}>{item.packed ? <CheckSquare className="text-green-500"/> : <Square className="text-gray-300"/>}<div className="flex-1">{item.name}</div></div>))}</div></div>); })}</div></div></div>);
   };
 
   if (loading) return <div className="h-screen flex items-center justify-center">載入中...</div>;
