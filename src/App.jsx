@@ -213,9 +213,6 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
         return () => { unsubT(); unsubReq(); unsubTasks(); unsubShop(); unsubInvest(); unsubPortfolio(); };
     }, [userId, isAdmin]);
 
-    useEffect(() => {
-        if (isAdmin) setAdminBankInputs(wallets);
-    }, [wallets, isAdmin]);
 
     const handleTransaction = async (memberId, amount, reason, type = 'general') => {
         const targetWallet = wallets[memberId] || { balance: 0, savings: 0, invested: 0 };
@@ -248,12 +245,36 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
     };
 
     const handleAdminBankInputChange = (memberId, field, value) => {
-        setAdminBankInputs(prev => ({ ...prev, [memberId]: { ...(prev[memberId] || {}), [field]: Number(value) } }));
+        setAdminBankInputs(prev => ({ 
+            ...prev, 
+            [memberId]: { 
+                ...(prev[memberId] || {}), 
+                [field]: value === '' ? '' : Number(value) 
+            } 
+        }));
     };
 
     const saveAdminBankUpdate = async (memberId) => {
-        const data = adminBankInputs[memberId];
-        await setDoc(doc(db, 'artifacts', appId, 'users', userId, 'cdollar_wallets', memberId), { ...data, memberId }, { merge: true });
+        const currentWallet = wallets[memberId] || { balance: 0, savings: 0 };
+        const edits = adminBankInputs[memberId] || {};
+        
+        // 判斷：如果有本地修改數字就用本地的，沒有就保持原狀
+        const finalBalance = edits.balance !== undefined ? edits.balance : currentWallet.balance;
+        const finalSavings = edits.savings !== undefined ? edits.savings : currentWallet.savings;
+
+        await setDoc(doc(db, 'artifacts', appId, 'users', userId, 'cdollar_wallets', memberId), { 
+            balance: finalBalance, 
+            savings: finalSavings, 
+            memberId 
+        }, { merge: true });
+        
+        // 儲存成功後，清空該成員的輸入緩存
+        setAdminBankInputs(prev => {
+            const next = { ...prev };
+            delete next[memberId];
+            return next;
+        });
+        
         alert('修改成功！');
     };
 
@@ -717,7 +738,15 @@ export default function App() {
     const unsubExpenses = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses'), snap => setExpenses(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubTrips = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'trips'), snap => setTrips(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubWallets = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'cdollar_wallets'), (snap) => {
-        const d = {}; snap.docs.forEach(doc => d[doc.data().memberId] = { balance: doc.data().balance, savings: doc.data().savings || 0, invested: doc.data().invested || 0 });
+        const d = {}; 
+        snap.docs.forEach(doc => {
+            // 修復：強制使用 doc.id 作為 key，保證雙寶資料絕對對應得上
+            d[doc.id] = { 
+                balance: doc.data().balance || 0, 
+                savings: doc.data().savings || 0, 
+                invested: doc.data().invested || 0 
+            };
+        });
         setWallets(d);
     });
     return () => { unsubMembers(); unsubEvents(); unsubExpenses(); unsubTrips(); unsubWallets(); };
