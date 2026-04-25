@@ -531,13 +531,25 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                                             <p className="font-black text-slate-800 flex items-center gap-2">{m.avatar} {m.name}</p>
                                             <div className="flex items-center gap-2">
                                                 <span className="text-xs font-bold text-slate-400 w-10">餘額</span>
-                                                <input type="number" className="flex-1 p-2 rounded-lg border border-slate-200 focus:border-indigo-500 outline-none text-sm font-bold shadow-sm" value={adminBankInputs[m.id]?.balance ?? wallets[m.id]?.balance ?? 0} onChange={e => handleAdminBankInputChange(m.id, 'balance', e.target.value)} />
+                                                <input 
+                                                    type="number" 
+                                                    className="flex-1 p-2 rounded-lg border border-slate-200 focus:border-indigo-500 outline-none text-sm font-bold shadow-sm" 
+                                                    value={adminBankInputs[m.id]?.balance ?? wallets[m.id]?.balance ?? 0} 
+                                                    onChange={e => handleAdminBankInputChange(m.id, 'balance', e.target.value)} 
+                                                />
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <span className="text-xs font-bold text-slate-400 w-10">存款</span>
-                                                <input type="number" className="flex-1 p-2 rounded-lg border border-slate-200 focus:border-indigo-500 outline-none text-sm font-bold shadow-sm" value={adminBankInputs[m.id]?.savings ?? wallets[m.id]?.savings ?? 0} onChange={e => handleAdminBankInputChange(m.id, 'savings', e.target.value)} />
+                                                <input 
+                                                    type="number" 
+                                                    className="flex-1 p-2 rounded-lg border border-slate-200 focus:border-indigo-500 outline-none text-sm font-bold shadow-sm" 
+                                                    value={adminBankInputs[m.id]?.savings ?? wallets[m.id]?.savings ?? 0} 
+                                                    onChange={e => handleAdminBankInputChange(m.id, 'savings', e.target.value)} 
+                                                />
                                             </div>
-                                            <button onClick={() => saveAdminBankUpdate(m.id)} className="w-full mt-1 bg-slate-800 text-white py-2 rounded-lg text-xs font-black shadow-md active:scale-95">儲存修改</button>
+                                            <button onClick={() => saveAdminBankUpdate(m.id)} className="w-full mt-1 bg-slate-800 text-white py-2 rounded-lg text-xs font-black shadow-md active:scale-95 transition">
+                                                儲存修改
+                                            </button>
                                         </div>
                                     ))}
                                 </div>
