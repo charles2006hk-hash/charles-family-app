@@ -3,16 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <!-- 標準 PWA 標籤 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    
     <meta name="mobile-web-app-capable" content="yes">
-    <!-- iOS 兼容標籤 -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Charles Family">
+    <link rel="apple-touch-icon" href="/icon-192.png">
+
     <title>Charles Family App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      :root { --sat: env(safe-area-inset-top); --sab: env(safe-area-inset-bottom); }
+      body { 
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        -webkit-tap-highlight-color: transparent;
+        overscroll-behavior-y: none; /* 防止下拉重新整理的橡皮筋效果 */
+      }
+      .pb-safe { padding-bottom: var(--sab); }
+      .pt-safe { padding-top: var(--sat); }
+    </style>
   </head>
-  <body>
+  <body class="bg-slate-50 text-slate-900">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
