@@ -81,8 +81,15 @@ const SEED_INVESTMENTS = [
 ];
 
 const formatDate = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-const formatMoney = (amount) => amount ? `HK$${Math.round(amount).toLocaleString()}` : '-';
-const convertToHKD = (cdollar) => (cdollar * EXCHANGE_RATE_CNY_HKD).toFixed(1);
+
+// 修改：真實金錢加上 $ 與千分位
+const formatMoney = (amount) => (amount !== undefined && amount !== null) ? `$${Math.round(amount).toLocaleString()}` : '$0';
+
+// 新增：C-Dollar 專屬符號 C$ 與千分位
+const formatCDollar = (amount) => (amount !== undefined && amount !== null) ? `C$ ${Math.round(amount).toLocaleString()}` : 'C$ 0';
+
+// 匯率折算功能 (保持不變，但加上千分位)
+const convertToHKD = (cdollar) => `$${(cdollar * EXCHANGE_RATE_CNY_HKD).toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})}`;
 
 const getLunarInfo = (date) => {
   const day = date.getDate(); const special = LUNAR_DATA.find(d => d.day === day);
@@ -127,20 +134,20 @@ const DashboardView = ({ currentUser, wallets, events, trips, setActiveTab }) =>
                         <div className="flex justify-between items-end border-b border-white/20 pb-3">
                             <div>
                                 <p className="text-[10px] font-black uppercase tracking-widest opacity-80 mb-1">{isAdmin ? '全家金融看板' : '我的總資產 (C-Dollar)'}</p>
-                                <p className="text-3xl font-black italic tracking-tighter drop-shadow-md">© {isAdmin ? '管理模式' : totalAssets}</p>
+                                <p className="text-3xl font-black italic tracking-tighter drop-shadow-md">{isAdmin ? '管理模式' : formatCDollar(totalAssets)}</p>
                             </div>
                             {!isAdmin && (
                                 <div className="text-right">
                                     <p className="text-[10px] font-black uppercase tracking-widest opacity-80 mb-1 flex items-center justify-end gap-1"><RefreshCw size={10}/> 折合港幣</p>
-                                    <p className="text-lg font-bold italic drop-shadow-md">HK$ {convertToHKD(totalAssets)}</p>
+                                    <p className="text-lg font-bold italic drop-shadow-md">{convertToHKD(totalAssets)}</p>
                                 </div>
                             )}
                         </div>
                         {!isAdmin && (
                             <div className="grid grid-cols-3 gap-2 text-center text-xs font-bold">
-                                <div><p className="opacity-60 mb-0.5">可用餘額</p><p>© {myWallet.balance}</p></div>
-                                <div className="border-l border-white/20"><p className="opacity-60 mb-0.5">銀行存款</p><p>© {myWallet.savings}</p></div>
-                                <div className="border-l border-white/20"><p className="opacity-60 mb-0.5">投資理財</p><p>© {myWallet.invested || 0}</p></div>
+                                <div><p className="opacity-60 mb-0.5">可用餘額</p><p>{formatCDollar(myWallet.balance)}</p></div>
+                                <div className="border-l border-white/20"><p className="opacity-60 mb-0.5">銀行存款</p><p>{formatCDollar(myWallet.savings)}</p></div>
+                                <div className="border-l border-white/20"><p className="opacity-60 mb-0.5">投資理財</p><p>{formatCDollar(myWallet.invested)}</p></div>
                             </div>
                         )}
                     </div>
@@ -176,7 +183,7 @@ const DashboardView = ({ currentUser, wallets, events, trips, setActiveTab }) =>
                             <div className="flex items-center gap-3 mb-2"><MapPin size={22} className="text-indigo-500" /><h4 className="font-black text-xl text-slate-800 truncate">{trip.destination}</h4></div>
                             <p className="text-sm font-bold text-slate-400 mb-4 ml-8">{trip.startDate} - {trip.endDate}</p>
                             <div className="flex items-center gap-3">
-                                <div className="flex-1 bg-slate-100 rounded-full h-3"><div className="bg-green-500 h-3 rounded-full" style={{width:`${calculatePackingProgress(trip.packingList)}%`}}></div></div>
+                                <div className="flex-1 bg-slate-100 rounded-full h-3"><div className="bg-green-500 h-3 rounded-full transition-all duration-500" style={{width:`${calculatePackingProgress(trip.packingList)}%`}}></div></div>
                                 <span className="text-xs font-black text-green-600 bg-green-50 px-2 py-1 rounded-md">行李 {calculatePackingProgress(trip.packingList)}%</span>
                             </div>
                         </div>
@@ -213,6 +220,9 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
         return () => { unsubT(); unsubReq(); unsubTasks(); unsubShop(); unsubInvest(); unsubPortfolio(); };
     }, [userId, isAdmin]);
 
+    useEffect(() => {
+        if (isAdmin) setAdminBankInputs(wallets);
+    }, [wallets, isAdmin]);
 
     const handleTransaction = async (memberId, amount, reason, type = 'general') => {
         const targetWallet = wallets[memberId] || { balance: 0, savings: 0, invested: 0 };
@@ -221,7 +231,6 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
         await setDoc(doc(db, 'artifacts', appId, 'users', userId, 'cdollar_wallets', memberId), { balance: newBalance, savings: targetWallet.savings, invested: targetWallet.invested || 0, memberId }, { merge: true });
     };
 
-    // 銀行存提款修復
     const handleBankTransfer = async (type) => {
         const amt = Number(bankAmount);
         if (isNaN(amt) || amt <= 0) return alert('請輸入有效金額');
@@ -236,45 +245,26 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
         }
         await setDoc(doc(db, 'artifacts', appId, 'users', userId, 'cdollar_wallets', currentUser.id), { balance: newBalance, savings: newSavings, invested: myWallet.invested || 0, memberId: currentUser.id }, { merge: true });
         
-        // 寫入交易紀錄
         await addDoc(collection(db, 'artifacts', appId, 'users', userId, 'cdollar_tx'), {
             memberId: currentUser.id, amount: type === 'deposit' ? -amt : amt, reason: type === 'deposit' ? '存入銀行' : '銀行提款', type: 'bank', date: new Date().toISOString(), createdBy: currentUser.name
         });
 
-        setBankAmount(''); alert(`成功${type === 'deposit' ? '存入' : '提出'} ©${amt}`);
+        setBankAmount(''); alert(`成功${type === 'deposit' ? '存入' : '提出'} ${formatCDollar(amt)}`);
     };
 
     const handleAdminBankInputChange = (memberId, field, value) => {
-        setAdminBankInputs(prev => ({ 
-            ...prev, 
-            [memberId]: { 
-                ...(prev[memberId] || {}), 
-                [field]: value === '' ? '' : Number(value) 
-            } 
-        }));
+        setAdminBankInputs(prev => ({ ...prev, [memberId]: { ...(prev[memberId] || {}), [field]: value === '' ? '' : Number(value) } }));
     };
 
     const saveAdminBankUpdate = async (memberId) => {
         const currentWallet = wallets[memberId] || { balance: 0, savings: 0 };
         const edits = adminBankInputs[memberId] || {};
-        
-        // 判斷：如果有本地修改數字就用本地的，沒有就保持原狀
         const finalBalance = edits.balance !== undefined ? edits.balance : currentWallet.balance;
         const finalSavings = edits.savings !== undefined ? edits.savings : currentWallet.savings;
 
-        await setDoc(doc(db, 'artifacts', appId, 'users', userId, 'cdollar_wallets', memberId), { 
-            balance: finalBalance, 
-            savings: finalSavings, 
-            memberId 
-        }, { merge: true });
+        await setDoc(doc(db, 'artifacts', appId, 'users', userId, 'cdollar_wallets', memberId), { balance: finalBalance, savings: finalSavings, memberId }, { merge: true });
         
-        // 儲存成功後，清空該成員的輸入緩存
-        setAdminBankInputs(prev => {
-            const next = { ...prev };
-            delete next[memberId];
-            return next;
-        });
-        
+        setAdminBankInputs(prev => { const next = { ...prev }; delete next[memberId]; return next; });
         alert('修改成功！');
     };
 
@@ -303,11 +293,11 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
         await addDoc(collection(db, 'artifacts', appId, 'users', userId, 'cdollar_tx'), { memberId: currentUser.id, amount: -amt, reason: `買入基金: ${product.title}`, type: 'invest', date: new Date().toISOString(), createdBy: currentUser.name });
         await addDoc(collection(db, 'artifacts', appId, 'users', userId, 'cdollar_portfolio'), { memberId: currentUser.id, productId: product.id, title: product.title, amount: amt, rate: product.rate, purchaseDate: new Date().toISOString(), status: 'active' });
         
-        setInvestAmount(''); alert(`成功買入 ©${amt} 的 ${product.title}`);
+        setInvestAmount(''); alert(`成功買入 ${formatCDollar(amt)} 的 ${product.title}`);
     };
     
     const handleSellInvest = async (portfolioItem) => {
-        if(!confirm(`確定要賣出 ${portfolioItem.title} 嗎？將收回 ©${portfolioItem.amount}`)) return;
+        if(!confirm(`確定要賣出 ${portfolioItem.title} 嗎？將收回 ${formatCDollar(portfolioItem.amount)}`)) return;
         const myWallet = wallets[currentUser.id] || { balance: 0, savings: 0, invested: 0 };
         const newBalance = myWallet.balance + portfolioItem.amount;
         const newInvested = Math.max(0, (myWallet.invested || 0) - portfolioItem.amount);
@@ -326,7 +316,6 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
         if (col === 'invest') await addDoc(collection(db, 'artifacts', appId, 'users', userId, 'cdollar_invest_products'), { title, rate: Number(val), cycle: 30, risk: '中', icon: '📊' });
     };
     
-    // 歷史紀錄刪除功能
     const handleAdminDelete = async (col, id) => { 
         if(confirm('確定刪除？此動作無法復原。')) await deleteDoc(doc(db, 'artifacts', appId, 'users', userId, `cdollar_${col}`, id)); 
     };
@@ -348,12 +337,13 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
 
     return (
         <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
+            {/* Header Area */}
             <div className="p-4 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-b-[2rem] shadow-lg text-white mb-4 relative overflow-hidden shrink-0">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full -mr-10 -mt-10 blur-xl"></div>
                 <div className="flex justify-between items-center mb-6 pt-2">
                     <div>
                         <h2 className="text-2xl font-black italic">Family FQ Center</h2>
-                        <p className="text-[10px] font-bold opacity-80 flex items-center gap-1 mt-1"><RefreshCw size={10}/> 實時掛鉤 CNY 匯率: 1 © = {EXCHANGE_RATE_CNY_HKD} HKD</p>
+                        <p className="text-[10px] font-bold opacity-80 flex items-center gap-1 mt-1"><RefreshCw size={10}/> 實時掛鉤 CNY 匯率: 1 C$ = {EXCHANGE_RATE_CNY_HKD} HKD</p>
                     </div>
                     <Award size={28} className="text-yellow-300 drop-shadow-md" />
                 </div>
@@ -363,22 +353,23 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                         {members.filter(m => m.role !== 'admin').map(m => (
                             <div key={m.id} className="bg-white/10 p-3 rounded-xl backdrop-blur-md border border-white/10">
                                 <p className="text-[10px] uppercase font-bold opacity-80 mb-1 flex items-center gap-1">{m.avatar} {m.name.split(' ')[0]}</p>
-                                <p className="text-xl font-black italic">© {wallets[m.id]?.balance || 0}</p>
-                                <p className="text-[10px] opacity-60 mt-1 font-bold">存款: © {wallets[m.id]?.savings || 0} | 投資: © {wallets[m.id]?.invested || 0}</p>
+                                <p className="text-xl font-black italic">{formatCDollar(wallets[m.id]?.balance)}</p>
+                                <p className="text-[10px] opacity-60 mt-1 font-bold">存款: {formatCDollar(wallets[m.id]?.savings)} | 投資: {formatCDollar(wallets[m.id]?.invested)}</p>
                             </div>
                         ))}
                     </div>
                 ) : (
                     <div className="bg-white/10 p-4 rounded-2xl backdrop-blur-md border border-white/10 flex justify-between items-center">
-                        <div><p className="text-xs font-bold opacity-80 mb-1">可用餘額</p><p className="text-3xl font-black italic tracking-tighter drop-shadow-lg">© {myWallet.balance}</p></div>
+                        <div><p className="text-xs font-bold opacity-80 mb-1">可用餘額</p><p className="text-3xl font-black italic tracking-tighter drop-shadow-lg">{formatCDollar(myWallet.balance)}</p></div>
                         <div className="text-right border-l border-white/20 pl-3">
-                            <p className="text-[10px] font-bold opacity-80 mb-0.5">活期存款</p><p className="text-sm font-bold italic">© {myWallet.savings}</p>
-                            <p className="text-[10px] font-bold opacity-80 mt-1 mb-0.5">理財組合</p><p className="text-sm font-bold italic text-yellow-300">© {myWallet.invested || 0}</p>
+                            <p className="text-[10px] font-bold opacity-80 mb-0.5">活期存款</p><p className="text-sm font-bold italic">{formatCDollar(myWallet.savings)}</p>
+                            <p className="text-[10px] font-bold opacity-80 mt-1 mb-0.5">理財組合</p><p className="text-sm font-bold italic text-yellow-300">{formatCDollar(myWallet.invested)}</p>
                         </div>
                     </div>
                 )}
             </div>
 
+            {/* Nav Tabs */}
             <div className="flex px-4 gap-2 mb-2 overflow-x-auto pb-2 shrink-0 hide-scrollbar">
                 {[{id:'tasks',icon:Target,label:'任務'}, {id:'shop',icon:ShoppingBag,label:'商城'}, {id:'invest',icon:BarChart2,label:'理財'}, {id:'bank',icon:Landmark,label:'銀行'}, {id:'wallet',icon:Wallet,label:'審批與明細', alert: pendingRequests.length > 0}].map(t => (
                     <button key={t.id} onClick={() => setActiveSubTab(t.id)} className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-black whitespace-nowrap transition-all relative ${activeSubTab === t.id ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-100 hover:bg-slate-50'}`}>
@@ -388,6 +379,7 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                 ))}
             </div>
 
+            {/* Content Area */}
             <div className="flex-1 overflow-y-auto px-4 space-y-4 pb-32">
                 {/* 審批與紀錄 (Wallet Tab) */}
                 {activeSubTab === 'wallet' && (
@@ -400,7 +392,7 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                                     <div key={req.id} className="bg-white p-3 rounded-xl shadow-sm flex justify-between items-center border border-orange-100/50">
                                         <div>
                                             <p className="font-bold text-slate-800 text-sm">{isAdmin && <span className="text-indigo-600 mr-1">{req.memberName}</span>}{req.title}</p>
-                                            <p className={`font-black text-xs italic ${req.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>{req.amount > 0 ? '+' : ''}{req.amount} ©</p>
+                                            <p className={`font-black text-xs italic ${req.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>{req.amount > 0 ? '+' : ''}{formatCDollar(Math.abs(req.amount))}</p>
                                         </div>
                                         {isAdmin ? (
                                             <div className="flex gap-2"><button onClick={() => handleRequestApproval(req, false)} className="px-3 py-1.5 bg-slate-100 text-slate-500 rounded-lg text-xs font-black hover:bg-red-50 hover:text-red-500">拒絕</button><button onClick={() => handleRequestApproval(req, true)} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-black shadow-md active:scale-95">批准</button></div>
@@ -421,7 +413,7 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                                             <div><p className="font-bold text-slate-800 text-sm">{tx.reason}</p><p className="text-[10px] text-slate-400 font-bold">{tx.date.split('T')[0]} {isAdmin && `· ${members.find(m=>m.id===tx.memberId)?.name.split(' ')[0]}`}</p></div>
                                         </div>
                                         <div className="flex items-center gap-3">
-                                            <p className={`font-black text-lg italic ${tx.amount > 0 ? 'text-green-600':'text-red-600'}`}>{tx.amount > 0 ? '+':''}{tx.amount}</p>
+                                            <p className={`font-black text-lg italic ${tx.amount > 0 ? 'text-green-600':'text-red-600'}`}>{tx.amount > 0 ? '+' : ''}{formatCDollar(Math.abs(tx.amount))}</p>
                                             {/* 新增歷史紀錄刪除功能 */}
                                             {isAdmin && <button onClick={() => handleAdminDelete('tx', tx.id)} className="text-slate-300 hover:text-red-500 transition-colors p-1"><Trash2 size={16}/></button>}
                                         </div>
@@ -438,7 +430,7 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                         {isAdmin && <button onClick={() => handleAdminAdd('tasks')} className="w-full bg-indigo-50 text-indigo-600 border border-indigo-100 py-3 rounded-2xl font-black flex justify-center items-center gap-2 mb-4"><Plus size={18}/> 發佈新任務</button>}
                         {tasks.map(task => (
                             <div key={task.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center relative">
-                                <div><span className="text-[9px] font-black uppercase text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full mb-1.5 inline-block tracking-widest">{task.type || '日常'}</span><h4 className="font-bold text-slate-800 text-sm">{task.title}</h4><p className="text-indigo-600 font-black italic text-sm mt-0.5">獎勵: © {task.reward}</p></div>
+                                <div><span className="text-[9px] font-black uppercase text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-full mb-1.5 inline-block tracking-widest">{task.type || '日常'}</span><h4 className="font-bold text-slate-800 text-sm">{task.title}</h4><p className="text-indigo-600 font-black italic text-sm mt-0.5">獎勵: {formatCDollar(task.reward)}</p></div>
                                 {isAdmin ? <button onClick={() => handleAdminDelete('tasks', task.id)} className="p-3 bg-red-50 text-red-500 rounded-xl"><Trash2 size={16}/></button> : <button onClick={() => submitRequest(task, 'task', task.reward)} className="px-4 py-2 bg-indigo-50 hover:bg-indigo-600 text-indigo-600 hover:text-white rounded-xl text-xs font-black transition-colors shadow-sm active:scale-95">完成請賞</button>}
                             </div>
                         ))}
@@ -453,7 +445,7 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                             {shopItems.map(item => (
                                 <div key={item.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex flex-col items-center text-center relative">
                                     {isAdmin && <button onClick={() => handleAdminDelete('shop', item.id)} className="absolute top-2 right-2 text-slate-300 hover:text-red-500"><Trash2 size={14}/></button>}
-                                    <span className="text-4xl mb-2 drop-shadow-sm">{item.icon || '🎁'}</span><h4 className="font-bold text-slate-800 text-sm mb-1">{item.title}</h4><p className="text-indigo-600 font-black italic mb-3">© {item.cost}</p>
+                                    <span className="text-4xl mb-2 drop-shadow-sm">{item.icon || '🎁'}</span><h4 className="font-bold text-slate-800 text-sm mb-1">{item.title}</h4><p className="text-indigo-600 font-black italic mb-3">{formatCDollar(item.cost)}</p>
                                     {!isAdmin && <button onClick={() => submitRequest(item, 'shop', item.cost)} className="w-full py-2.5 rounded-xl text-xs font-black transition bg-indigo-600 text-white shadow-md active:scale-95">申請兌換</button>}
                                 </div>
                             ))}
@@ -471,7 +463,7 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                                 <h4 className="font-black text-sm mb-3 flex items-center gap-2"><PieChart size={16}/> 我的投資組合</h4>
                                 {myPortfolio.map(p => (
                                     <div key={p.id} className="flex justify-between items-center bg-white/10 p-3 rounded-xl mb-2">
-                                        <div><p className="font-bold text-sm">{p.title}</p><p className="text-[10px] opacity-70">買入: © {p.amount}</p></div>
+                                        <div><p className="font-bold text-sm">{p.title}</p><p className="text-[10px] opacity-70">買入: {formatCDollar(p.amount)}</p></div>
                                         <div className="flex items-center gap-3">
                                             <p className="text-green-400 font-black text-sm">預期: +{p.rate}%</p>
                                             <button onClick={() => handleSellInvest(p)} className="px-2 py-1 bg-red-500 text-white text-[10px] font-black rounded-lg active:scale-95">賣出</button>
@@ -491,7 +483,7 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                                 </div>
                                 {!isAdmin && (
                                     <div className="flex gap-2 mt-4 pt-4 border-t border-slate-50">
-                                        <input type="number" placeholder="投資金額 ©" value={investAmount} onChange={e=>setInvestAmount(e.target.value)} className="w-1/2 bg-slate-50 rounded-xl px-3 py-2 text-sm font-bold border-none" />
+                                        <input type="number" placeholder="投資金額 (數字)" value={investAmount} onChange={e=>setInvestAmount(e.target.value)} className="w-1/2 bg-slate-50 rounded-xl px-3 py-2 text-sm font-bold border-none" />
                                         <button onClick={() => handleInvest(prod)} className="w-1/2 bg-slate-800 text-white rounded-xl text-xs font-black shadow-md active:scale-95">買入</button>
                                     </div>
                                 )}
@@ -509,7 +501,7 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                         {!isAdmin ? (
                             <div className="space-y-4 max-w-xs mx-auto">
                                 <p className="text-xs text-slate-500 font-bold mb-6">將餘額存入銀行，養成儲蓄好習慣並賺取利息。</p>
-                                <input type="number" placeholder="輸入金額 ©" value={bankAmount} onChange={e => setBankAmount(e.target.value)} className="w-full bg-slate-50 border-none rounded-2xl p-4 font-black text-center text-xl focus:ring-2 ring-indigo-500 text-indigo-900" />
+                                <input type="number" placeholder="輸入金額 (數字)" value={bankAmount} onChange={e => setBankAmount(e.target.value)} className="w-full bg-slate-50 border-none rounded-2xl p-4 font-black text-center text-xl focus:ring-2 ring-indigo-500 text-indigo-900" />
                                 <div className="flex gap-2">
                                     <button onClick={() => handleBankTransfer('withdraw')} className="flex-1 bg-slate-100 text-slate-600 py-4 rounded-2xl font-black active:scale-95 transition">提款出錢包</button>
                                     <button onClick={() => handleBankTransfer('deposit')} className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black shadow-lg shadow-indigo-200 active:scale-95 transition">存入銀行</button>
@@ -531,25 +523,13 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                                             <p className="font-black text-slate-800 flex items-center gap-2">{m.avatar} {m.name}</p>
                                             <div className="flex items-center gap-2">
                                                 <span className="text-xs font-bold text-slate-400 w-10">餘額</span>
-                                                <input 
-                                                    type="number" 
-                                                    className="flex-1 p-2 rounded-lg border border-slate-200 focus:border-indigo-500 outline-none text-sm font-bold shadow-sm" 
-                                                    value={adminBankInputs[m.id]?.balance ?? wallets[m.id]?.balance ?? 0} 
-                                                    onChange={e => handleAdminBankInputChange(m.id, 'balance', e.target.value)} 
-                                                />
+                                                <input type="number" className="flex-1 p-2 rounded-lg border border-slate-200 focus:border-indigo-500 outline-none text-sm font-bold shadow-sm" value={adminBankInputs[m.id]?.balance ?? wallets[m.id]?.balance ?? 0} onChange={e => handleAdminBankInputChange(m.id, 'balance', e.target.value)} />
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <span className="text-xs font-bold text-slate-400 w-10">存款</span>
-                                                <input 
-                                                    type="number" 
-                                                    className="flex-1 p-2 rounded-lg border border-slate-200 focus:border-indigo-500 outline-none text-sm font-bold shadow-sm" 
-                                                    value={adminBankInputs[m.id]?.savings ?? wallets[m.id]?.savings ?? 0} 
-                                                    onChange={e => handleAdminBankInputChange(m.id, 'savings', e.target.value)} 
-                                                />
+                                                <input type="number" className="flex-1 p-2 rounded-lg border border-slate-200 focus:border-indigo-500 outline-none text-sm font-bold shadow-sm" value={adminBankInputs[m.id]?.savings ?? wallets[m.id]?.savings ?? 0} onChange={e => handleAdminBankInputChange(m.id, 'savings', e.target.value)} />
                                             </div>
-                                            <button onClick={() => saveAdminBankUpdate(m.id)} className="w-full mt-1 bg-slate-800 text-white py-2 rounded-lg text-xs font-black shadow-md active:scale-95 transition">
-                                                儲存修改
-                                            </button>
+                                            <button onClick={() => saveAdminBankUpdate(m.id)} className="w-full mt-1 bg-slate-800 text-white py-2 rounded-lg text-xs font-black shadow-md active:scale-95">儲存修改</button>
                                         </div>
                                     ))}
                                 </div>
