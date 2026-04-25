@@ -109,10 +109,16 @@ const calculatePackingProgress = (list) => {
 
 // --- 3. Sub-Components ---
 
-// Dashboard (首頁)
-const DashboardView = ({ currentUser, wallets, events, trips, setActiveTab }) => {
+// Dashboard (首頁) - 已優化個人日程過濾與頭像顯示
+const DashboardView = ({ currentUser, members, wallets, events, trips, setActiveTab }) => {
     const today = formatDate(new Date());
-    const upcomingEvents = events.filter(e => e.date >= today).sort((a,b) => a.date.localeCompare(b.date)).slice(0, 3);
+    
+    // 修復 1：過濾出 date >= 今天，且 participants 陣列中包含目前登入者 (currentUser.id) 的行程
+    const upcomingEvents = events
+        .filter(e => e.date >= today && (e.participants || []).includes(currentUser.id))
+        .sort((a,b) => a.date.localeCompare(b.date))
+        .slice(0, 3);
+        
     const activeTrips = trips.filter(t => t.endDate >= today).sort((a,b) => a.startDate.localeCompare(b.startDate)).slice(0, 1);
     const myWallet = wallets[currentUser.id] || { balance: 0, savings: 0, invested: 0 };
     const totalAssets = myWallet.balance + myWallet.savings + (myWallet.invested || 0);
@@ -156,7 +162,7 @@ const DashboardView = ({ currentUser, wallets, events, trips, setActiveTab }) =>
 
             <div>
                 <div className="flex justify-between items-center mb-3 px-2">
-                    <h3 className="font-black text-lg text-slate-800 flex items-center gap-2"><CalendarIcon size={18} className="text-indigo-500"/> 近期日程</h3>
+                    <h3 className="font-black text-lg text-slate-800 flex items-center gap-2"><CalendarIcon size={18} className="text-indigo-500"/> 近期與我相關的日程</h3>
                     <button onClick={() => setActiveTab('calendar')} className="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full active:scale-95 transition">查看全部</button>
                 </div>
                 <div className="space-y-3">
@@ -169,9 +175,16 @@ const DashboardView = ({ currentUser, wallets, events, trips, setActiveTab }) =>
                             <div className="flex-1 min-w-0">
                                 <p className="font-black text-slate-800 text-lg truncate">{ev.title}</p>
                                 <p className="text-xs font-bold text-slate-400 flex items-center gap-1"><Clock size={12}/> {ev.startTime} {ev.notes ? `· ${ev.notes}` : ''}</p>
+                                {/* 修復 2：在首頁的日程列表中，清晰顯示參與該行程的成員頭像 */}
+                                <div className="flex items-center gap-1 mt-2">
+                                    {ev.participants?.map(pId => {
+                                        const mem = members.find(m => m.id === pId);
+                                        return mem ? <div key={pId} className="w-6 h-6 rounded-full overflow-hidden bg-slate-50 border border-slate-200 text-xs flex items-center justify-center shadow-sm" title={mem.name}>{mem.avatar}</div> : null;
+                                    })}
+                                </div>
                             </div>
                         </div>
-                    )) : <div className="text-center text-slate-400 font-bold py-8 bg-white rounded-2xl border border-slate-100 italic">近期沒有安排</div>}
+                    )) : <div className="text-center text-slate-400 font-bold py-8 bg-white rounded-2xl border border-slate-100 italic">近期沒有與您相關的安排</div>}
                 </div>
             </div>
 
@@ -1026,7 +1039,7 @@ export default function App() {
         </header>
 
         <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-32">
-          {activeTab === 'home' && <DashboardView currentUser={currentUserRole} wallets={wallets} events={events} trips={trips} setActiveTab={setActiveTab} />}
+          {activeTab === 'home' && <DashboardView currentUser={currentUserRole} members={members} wallets={wallets} events={events} trips={trips} setActiveTab={setActiveTab} />}
           {activeTab === 'calendar' && renderCalendar()}
           {activeTab === 'cdollar' && <CDollarView currentUser={currentUserRole} members={members} wallets={wallets} db={db} userId={user.uid} />}
           {activeTab === 'expenses' && renderExpenses()}
