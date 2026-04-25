@@ -807,11 +807,13 @@ export default function App() {
     const daysInMonth = new Date(year, month + 1, 0).getDate(); const firstDay = new Date(year, month, 1).getDay();
     const days = [];
 
+    // 年視圖 (Year View)
     if (calendarView === 'year') {
       const months = Array.from({length: 12}, (_, i) => i);
       return ( <div className="bg-white md:rounded-3xl shadow-sm h-full flex flex-col overflow-hidden">{renderCalendarHeader()}<div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 overflow-y-auto">{months.map(m => ( <div key={m} className="border border-slate-100 rounded-2xl p-4 hover:shadow-md cursor-pointer bg-white transition-all active:scale-95" onClick={() => { setCurrentDate(new Date(year, m, 1)); setCalendarView('month'); }}><div className="text-center font-black mb-3 text-indigo-600 bg-indigo-50 rounded-xl py-2">{m+1}月</div><div className="grid grid-cols-7 gap-1 text-[8px] text-center font-bold text-slate-400">{['日','一','二','三','四','五','六'].map(d => <div key={d} className={d==='日'||d==='六'?'text-red-400':''}>{d}</div>)}{Array.from({length: new Date(year, m, 1).getDay()}).map((_, i) => <div key={`e-${i}`}></div>)}{Array.from({length: new Date(year, m+1, 0).getDate()}).map((_, i) => { const isHol = HK_HOLIDAYS[formatDate(new Date(year, m, i+1))]; return <div key={i} className={`rounded-full aspect-square flex items-center justify-center ${isHol ? 'bg-red-100 text-red-600' : 'bg-slate-50'}`}>{i+1}</div>; })}</div></div>))}</div></div>);
     }
     
+    // 日視圖 (Day View / Mobile View)
     if (calendarView === 'day' || window.innerWidth < 768) {
       const miniDays = [];
       for (let i = 0; i < firstDay; i++) miniDays.push(<div key={`empty-${i}`} className="h-12"></div>);
@@ -855,11 +857,23 @@ export default function App() {
                          const isPast = new Date(`${ev.date}T${ev.endTime||'23:59'}`) < new Date();
                          return (
                            <div key={ev.id} onClick={() => { setEventFormData(ev); setShowEventModal(true); }} className={`flex gap-4 p-5 rounded-[2rem] border transition-transform active:scale-[0.98] cursor-pointer ${isPast ? 'opacity-50 bg-slate-50 border-slate-100' : 'bg-white shadow-sm border-slate-100'}`}>
-                              <div className="flex flex-col items-center justify-center w-16 border-r pr-4 border-slate-100"><span className="text-sm font-black text-slate-800">{ev.startTime}</span>{ev.endTime && <><div className="h-4 w-[2px] bg-slate-100 my-1"></div><span className="text-xs font-bold text-slate-400">{ev.endTime}</span></>}</div>
+                              <div className="flex flex-col items-center justify-center w-16 border-r pr-4 border-slate-100">
+                                  <span className="text-sm font-black text-slate-800">{ev.startTime}</span>
+                                  {ev.endTime && <><div className="h-4 w-[2px] bg-slate-100 my-1"></div><span className="text-xs font-bold text-slate-400">{ev.endTime}</span></>}
+                              </div>
                               <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-2 mb-1"><span className={`w-3 h-3 rounded-full ${cat.color.replace('text', 'bg').split(' ')[0]}`}></span><span className="font-black text-lg text-slate-800 truncate">{ev.title}</span></div>
-                                  {ev.notes && <div className="text-xs font-bold text-slate-400 truncate mb-3">{ev.notes}</div>}
-                                  <div className="flex items-center gap-1">{ev.participants?.map(p => { const mem = members.find(m=>m.id===p); return mem ? <div key={p} className="w-6 h-6 rounded-full overflow-hidden bg-slate-100 border-2 border-white text-xs flex items-center justify-center shadow-sm" title={mem.name}>{mem.avatar}</div> : null })}</div>
+                                  <div className="flex items-center gap-2 mb-1">
+                                      <span className={`w-3 h-3 rounded-full shrink-0 ${cat.color.replace('text', 'bg').split(' ')[0]}`}></span>
+                                      {/* 【修改點 1】：將參與者頭像移至標題前方 */}
+                                      <div className="flex items-center -space-x-1.5 shrink-0">
+                                          {ev.participants?.map(p => { 
+                                              const mem = members.find(m=>m.id===p); 
+                                              return mem ? <div key={p} className="w-5 h-5 rounded-full overflow-hidden bg-slate-100 border-2 border-white text-[10px] flex items-center justify-center shadow-sm relative z-10" title={mem.name}>{mem.avatar}</div> : null 
+                                          })}
+                                      </div>
+                                      <span className="font-black text-lg text-slate-800 truncate">{ev.title}</span>
+                                  </div>
+                                  {ev.notes && <div className="text-xs font-bold text-slate-400 truncate mb-1">{ev.notes}</div>}
                               </div>
                            </div>
                          )
@@ -872,6 +886,7 @@ export default function App() {
       );
     }
 
+    // 月視圖 (Desktop Month View)
     for (let i = 0; i < firstDay; i++) days.push(<div key={`empty-${i}`} className="h-28 bg-slate-50/50 border-r border-b"></div>);
     for (let d = 1; d <= daysInMonth; d++) {
       const dateObj = new Date(year, month, d); const dateStr = formatDate(dateObj); const isToday = formatDate(new Date()) === dateStr;
@@ -879,8 +894,31 @@ export default function App() {
       const dayEvents = events.filter(e => e.date === dateStr);
       days.push(
         <div key={d} onClick={() => { setCurrentDate(dateObj); setCalendarView('day'); }} className={`h-28 border-r border-b p-1.5 relative hover:bg-indigo-50/50 transition-colors cursor-pointer ${isToday ? 'bg-indigo-50/30' : 'bg-white'}`}>
-           <div className="flex justify-between items-start"><span className={`text-sm font-black w-6 h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-700'}`}>{d}</span><div className="flex flex-col items-end"><span className="text-[9px] font-bold text-slate-400">{lunar.dayText}</span>{lunar.auspicious && <span className="text-[8px] font-bold text-orange-500 scale-90 origin-right border border-orange-200 rounded px-1 bg-orange-50 mt-0.5 whitespace-nowrap">{lunar.auspicious}</span>}{holiday && <span className="text-[9px] font-black text-red-500 mt-0.5">{holiday}</span>}</div></div>
-           <div className="mt-1 flex flex-col gap-1 overflow-hidden h-[calc(100%-28px)]">{dayEvents.slice(0, 3).map(ev => { const cat = categories.find(c => c.id === ev.type) || categories[0]; return (<div key={ev.id} onMouseEnter={(e) => setHoveredEvent({ event: ev, x: e.clientX, y: e.clientY })} onMouseLeave={() => setHoveredEvent(null)} onClick={(e) => { e.stopPropagation(); setEventFormData(ev); setShowEventModal(true); }} className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md truncate border ${cat.color}`}>{ev.title}</div>); })}</div>
+           <div className="flex justify-between items-start">
+               <span className={`text-sm font-black w-6 h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-700'}`}>{d}</span>
+               <div className="flex flex-col items-end">
+                   <span className="text-[9px] font-bold text-slate-400">{lunar.dayText}</span>
+                   {lunar.auspicious && <span className="text-[8px] font-bold text-orange-500 scale-90 origin-right border border-orange-200 rounded px-1 bg-orange-50 mt-0.5 whitespace-nowrap">{lunar.auspicious}</span>}
+                   {holiday && <span className="text-[9px] font-black text-red-500 mt-0.5">{holiday}</span>}
+               </div>
+           </div>
+           <div className="mt-1 flex flex-col gap-1 overflow-hidden h-[calc(100%-28px)]">
+             {dayEvents.slice(0, 3).map(ev => { 
+                 const cat = categories.find(c => c.id === ev.type) || categories[0]; 
+                 return (
+                    <div key={ev.id} onMouseEnter={(e) => setHoveredEvent({ event: ev, x: e.clientX, y: e.clientY })} onMouseLeave={() => setHoveredEvent(null)} onClick={(e) => { e.stopPropagation(); setEventFormData(ev); setShowEventModal(true); }} className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md truncate border flex items-center gap-1 ${cat.color}`}>
+                        {/* 【修改點 2】：在桌面月曆視圖的小格子裡，也將頭像放在標題前面 */}
+                        <div className="flex -space-x-1 shrink-0">
+                            {ev.participants?.slice(0,3).map(p => {
+                                const mem = members.find(m=>m.id===p);
+                                return mem ? <span key={p} className="text-[8px] drop-shadow-sm">{mem.avatar}</span> : null;
+                            })}
+                        </div>
+                        <span className="truncate">{ev.title}</span>
+                    </div>
+                 ); 
+             })}
+           </div>
         </div>
       );
     }
