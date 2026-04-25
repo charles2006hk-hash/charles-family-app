@@ -27,7 +27,6 @@ const db = getFirestore(app);
 const appId = 'charles-family-app';
 
 // --- 2. Constants & Core Data ---
-// 模擬實時人民幣兌港幣匯率 (CNY to HKD)
 const EXCHANGE_RATE_CNY_HKD = 1.08; 
 
 const DEFAULT_MEMBERS_SEED = [
@@ -178,7 +177,6 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
     const [investAmount, setInvestAmount] = useState('');
     const isAdmin = currentUser.role === 'admin';
 
-    // 獲取所有金融動態資料
     useEffect(() => {
         const unsubT = onSnapshot(query(collection(db, 'artifacts', appId, 'users', userId, 'cdollar_tx'), orderBy('date', 'desc'), limit(30)), snap => setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
         const unsubReq = onSnapshot(query(collection(db, 'artifacts', appId, 'users', userId, 'cdollar_requests'), orderBy('createdAt', 'desc')), snap => setRequests(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
@@ -190,7 +188,6 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
         return () => { unsubT(); unsubReq(); unsubTasks(); unsubShop(); unsubInvest(); unsubPortfolio(); };
     }, [userId, isAdmin]);
 
-    // 核心交易處理
     const handleTransaction = async (memberId, amount, reason, type = 'general') => {
         const targetWallet = wallets[memberId] || { balance: 0, savings: 0, invested: 0 };
         const newBalance = Math.max(0, targetWallet.balance + amount);
@@ -198,7 +195,6 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
         await setDoc(doc(db, 'artifacts', appId, 'users', userId, 'cdollar_wallets', memberId), { balance: newBalance, savings: targetWallet.savings, invested: targetWallet.invested || 0, memberId }, { merge: true });
     };
 
-    // 銀行存取款
     const handleBankTransfer = async (type) => {
         const amt = Number(bankAmount);
         if (isNaN(amt) || amt <= 0) return alert('請輸入有效金額');
@@ -215,7 +211,6 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
         setBankAmount(''); alert(`成功${type === 'deposit' ? '存入' : '提出'} ©${amt}`);
     };
 
-    // 管理員派發全家利息
     const handleAdminDistributeInterest = async (rate) => {
         if (!confirm(`確定按 ${rate}% 派發利息給所有有存款的成員嗎？`)) return;
         for (const memberId of Object.keys(wallets)) {
@@ -231,23 +226,19 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
         alert('利息派發完成！');
     };
 
-    // 投資組合購買 (孩子)
     const handleInvest = async (product) => {
         const amt = Number(investAmount);
         if (isNaN(amt) || amt <= 0) return alert('請輸入有效投資金額');
         const myWallet = wallets[currentUser.id] || { balance: 0, savings: 0, invested: 0 };
         if (amt > myWallet.balance) return alert('可用餘額不足以投資此產品！');
         
-        // 扣款並增加投資額
         await setDoc(doc(db, 'artifacts', appId, 'users', userId, 'cdollar_wallets', currentUser.id), { balance: myWallet.balance - amt, savings: myWallet.savings, invested: (myWallet.invested || 0) + amt, memberId: currentUser.id }, { merge: true });
         await addDoc(collection(db, 'artifacts', appId, 'users', userId, 'cdollar_tx'), { memberId: currentUser.id, amount: -amt, reason: `買入基金: ${product.title}`, type: 'invest', date: new Date().toISOString(), createdBy: currentUser.name });
-        // 加入 Portfolio
         await addDoc(collection(db, 'artifacts', appId, 'users', userId, 'cdollar_portfolio'), { memberId: currentUser.id, productId: product.id, title: product.title, amount: amt, rate: product.rate, purchaseDate: new Date().toISOString(), status: 'active' });
         
         setInvestAmount(''); alert(`成功買入 ©${amt} 的 ${product.title}`);
     };
 
-    // CRUD 彈窗整合
     const handleAdminAdd = async (col) => {
         const title = prompt(`請輸入名稱:`); if (!title) return;
         const val = prompt(`請輸入數值 (例如獎勵額/花費額/回報率):`); if (!val || isNaN(val)) return alert('數值無效');
@@ -257,7 +248,6 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
     };
     const handleAdminDelete = async (col, id) => { if(confirm('確定刪除？')) await deleteDoc(doc(db, 'artifacts', appId, 'users', userId, `cdollar_${col}`, id)); };
 
-    // 任務與商城申請機制
     const submitRequest = async (item, type, amount) => {
         if (type === 'shop' && (wallets[currentUser.id]?.balance || 0) < amount) return alert('可用餘額不足！');
         await addDoc(collection(db, 'artifacts', appId, 'users', userId, 'cdollar_requests'), { memberId: currentUser.id, memberName: currentUser.name.split(' ')[0], type, title: item.title, amount: type === 'shop' ? -amount : amount, status: 'pending', createdAt: new Date().toISOString() });
@@ -267,6 +257,11 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
         if (isApprove) await handleTransaction(req.memberId, req.amount, `${req.type === 'shop' ? '兌換' : '完成'}: ${req.title}`, req.type);
         await deleteDoc(doc(db, 'artifacts', appId, 'users', userId, 'cdollar_requests', req.id));
     };
+    const handleAdminBankUpdate = async (memberId, field, amount) => {
+        const targetWallet = wallets[memberId] || { balance: 0, savings: 0 };
+        await setDoc(doc(db, 'artifacts', appId, 'users', userId, 'cdollar_wallets', memberId), { ...targetWallet, [field]: amount, memberId }, { merge: true });
+        alert('修改成功！');
+    };
 
     const myWallet = wallets[currentUser.id] || { balance: 0, savings: 0, invested: 0 };
     const myPortfolio = portfolio.filter(p => p.memberId === currentUser.id && p.status === 'active');
@@ -274,7 +269,6 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
 
     return (
         <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
-            {/* Header Area */}
             <div className="p-4 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-b-[2rem] shadow-lg text-white mb-4 relative overflow-hidden shrink-0">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full -mr-10 -mt-10 blur-xl"></div>
                 <div className="flex justify-between items-center mb-6 pt-2">
@@ -306,7 +300,6 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                 )}
             </div>
 
-            {/* Nav Tabs */}
             <div className="flex px-4 gap-2 mb-2 overflow-x-auto pb-2 shrink-0 hide-scrollbar">
                 {[{id:'tasks',icon:Target,label:'任務'}, {id:'shop',icon:ShoppingBag,label:'商城'}, {id:'invest',icon:BarChart2,label:'理財'}, {id:'bank',icon:Landmark,label:'銀行'}, {id:'wallet',icon:Wallet,label:'審批', alert: pendingRequests.length > 0}].map(t => (
                     <button key={t.id} onClick={() => setActiveSubTab(t.id)} className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-black whitespace-nowrap transition-all relative ${activeSubTab === t.id ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-100 hover:bg-slate-50'}`}>
@@ -316,9 +309,7 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                 ))}
             </div>
 
-            {/* Content Area */}
             <div className="flex-1 overflow-y-auto px-4 space-y-4 pb-32">
-                {/* 審批與紀錄 */}
                 {activeSubTab === 'wallet' && (
                     <div className="space-y-4">
                         {pendingRequests.length > 0 && (
@@ -352,7 +343,6 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                     </div>
                 )}
 
-                {/* 任務大廳 */}
                 {activeSubTab === 'tasks' && (
                     <div className="space-y-3">
                         {isAdmin && <button onClick={() => handleAdminAdd('tasks')} className="w-full bg-indigo-50 text-indigo-600 border border-indigo-100 py-3 rounded-2xl font-black flex justify-center items-center gap-2 mb-4"><Plus size={18}/> 發佈新任務</button>}
@@ -365,7 +355,6 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                     </div>
                 )}
 
-                {/* 兌換商城 */}
                 {activeSubTab === 'shop' && (
                     <div className="space-y-4">
                         {isAdmin && <button onClick={() => handleAdminAdd('shop')} className="w-full bg-indigo-50 text-indigo-600 border border-indigo-100 py-3 rounded-2xl font-black flex justify-center items-center gap-2"><Plus size={18}/> 上架新產品</button>}
@@ -381,7 +370,6 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                     </div>
                 )}
 
-                {/* 投資理財 (Financial Products) */}
                 {activeSubTab === 'invest' && (
                     <div className="space-y-4">
                         {isAdmin && <button onClick={() => handleAdminAdd('invest')} className="w-full bg-indigo-50 text-indigo-600 border border-indigo-100 py-3 rounded-2xl font-black flex justify-center items-center gap-2 mb-4"><Plus size={18}/> 發行新金融產品</button>}
@@ -417,18 +405,17 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                     </div>
                 )}
 
-                {/* 央行與存款 */}
                 {activeSubTab === 'bank' && (
                     <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm text-center">
                         <div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4"><Landmark size={40} className="text-indigo-500" /></div>
-                        <h3 className="text-xl font-black text-slate-800 mb-2">家庭央行儲蓄</h3>
+                        <h3 className="text-xl font-black text-slate-800 mb-2">活期存款銀行</h3>
                         
                         {!isAdmin ? (
                             <div className="space-y-4 max-w-xs mx-auto">
                                 <p className="text-xs text-slate-500 font-bold mb-6">將餘額存入銀行，養成儲蓄好習慣並賺取利息。</p>
                                 <input type="number" placeholder="輸入金額 ©" value={bankAmount} onChange={e => setBankAmount(e.target.value)} className="w-full bg-slate-50 border-none rounded-2xl p-4 font-black text-center text-xl focus:ring-2 ring-indigo-500 text-indigo-900" />
                                 <div className="flex gap-2">
-                                    <button onClick={() => handleBankTransfer('withdraw')} className="flex-1 bg-slate-100 text-slate-600 py-4 rounded-2xl font-black active:scale-95 transition">提款</button>
+                                    <button onClick={() => handleBankTransfer('withdraw')} className="flex-1 bg-slate-100 text-slate-600 py-4 rounded-2xl font-black active:scale-95 transition">提款出錢包</button>
                                     <button onClick={() => handleBankTransfer('deposit')} className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black shadow-lg shadow-indigo-200 active:scale-95 transition">存入銀行</button>
                                 </div>
                             </div>
@@ -436,18 +423,16 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                             <div className="space-y-6 text-left">
                                 <div className="bg-indigo-50 p-5 rounded-2xl border border-indigo-100">
                                     <h4 className="font-black text-indigo-800 mb-2 flex items-center gap-2"><Settings size={16}/> 央行派息面板</h4>
-                                    <p className="text-xs font-bold text-indigo-500 mb-4">點擊下方按鈕，系統將自動計算並發放利息至有存款的成員銀行帳戶中。</p>
+                                    <p className="text-xs font-bold text-indigo-500 mb-4">點擊下方按鈕，系統將自動計算並發放利息至有存款的成員帳戶中。</p>
                                     <button onClick={() => handleAdminDistributeInterest(5)} className="w-full bg-indigo-600 text-white py-3 rounded-xl font-black shadow-md active:scale-95">全家發放 5% 活期利息</button>
                                 </div>
                                 <div className="space-y-3 mt-4">
                                     <p className="text-sm font-black text-slate-800">成員資產手動修改</p>
                                     {members.filter(m => m.role !== 'admin').map(m => (
-                                        <div key={m.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between">
-                                            <div className="font-black text-slate-800 flex items-center gap-2">{m.avatar} {m.name.split(' ')[0]}</div>
-                                            <div className="text-right">
-                                                <p className="text-xs font-bold text-slate-400">餘額: ©{wallets[m.id]?.balance || 0}</p>
-                                                <p className="text-xs font-bold text-indigo-400">存款: ©{wallets[m.id]?.savings || 0}</p>
-                                            </div>
+                                        <div key={m.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col gap-3">
+                                            <p className="font-black text-slate-800 flex items-center gap-2">{m.avatar} {m.name}</p>
+                                            <div className="flex items-center gap-2"><span className="text-xs font-bold text-slate-400 w-10">餘額</span><input type="number" className="flex-1 p-2 rounded-lg border-none text-sm font-bold shadow-sm" value={wallets[m.id]?.balance || 0} onChange={e => handleAdminBankUpdate(m.id, 'balance', Number(e.target.value))} /></div>
+                                            <div className="flex items-center gap-2"><span className="text-xs font-bold text-slate-400 w-10">存款</span><input type="number" className="flex-1 p-2 rounded-lg border-none text-sm font-bold shadow-sm" value={wallets[m.id]?.savings || 0} onChange={e => handleAdminBankUpdate(m.id, 'savings', Number(e.target.value))} /></div>
                                         </div>
                                     ))}
                                 </div>
@@ -460,9 +445,8 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
     );
 };
 
-// ... (以下保留 Tooltip, EventFormModal, ExpenseFormModal, TripWizard, AddMemberModal, ChangePasswordModal) ...
-// (代碼省略部分註解以符合長度，但所有邏輯皆已完整寫出)
-const Tooltip = ({ hoveredEvent, categories, members }) => {
+// Tooltip, Modals
+const Tooltip = ({ hoveredEvent, categories }) => {
     if (!hoveredEvent) return null; const { event, x, y } = hoveredEvent; const cat = categories.find(c => c.id === event.type) || categories[0];
     return (<div className="fixed bg-white p-3 rounded-xl shadow-xl border border-gray-100 w-64 pointer-events-none" style={{ top: y + 20, left: Math.min(x, window.innerWidth - 250), zIndex: 100 }}><div className={`text-[10px] font-bold px-2 py-0.5 rounded w-fit mb-1 ${cat.color}`}>{cat.name}</div><div className="font-bold text-gray-800 text-sm">{event.title}</div><div className="text-xs text-gray-500 mt-1 flex items-center gap-1"><Clock size={12}/> {event.startTime} - {event.endTime}</div>{event.notes && <div className="text-xs text-gray-600 mt-2 bg-gray-50 p-2 rounded">{event.notes}</div>}</div>);
 };
@@ -551,6 +535,12 @@ const AddMemberModal = ({ isOpen, onClose, onAdd }) => {
     );
 };
 
+const ChangePasswordModal = ({ isOpen, onClose, onConfirm }) => {
+    if(!isOpen) return null;
+    const [pwd, setPwd] = useState('');
+    return (<div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm"><div className="bg-white p-8 rounded-[2.5rem] shadow-2xl w-full max-w-sm"><h3 className="font-black text-xl mb-6">重設密碼</h3><input className="w-full bg-slate-50 border-none p-4 rounded-2xl text-center tracking-widest font-black text-xl mb-6" placeholder="輸入新密碼" value={pwd} onChange={e => setPwd(e.target.value)} /><div className="flex gap-3"><button onClick={onClose} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black">取消</button><button onClick={() => onConfirm(pwd)} disabled={!pwd} className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-lg">確認修改</button></div></div></div>);
+};
+
 // --- 4. Main App Component ---
 export default function App() {
   const [user, setUser] = useState(null);
@@ -576,6 +566,9 @@ export default function App() {
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [showTripWizard, setShowTripWizard] = useState(false);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+  
+  const [targetMemberId, setTargetMemberId] = useState(null);
   const [eventFormData, setEventFormData] = useState({});
   const [expenseFormData, setExpenseFormData] = useState({});
 
@@ -616,6 +609,23 @@ export default function App() {
           setCurrentUserRole(loginTarget); setActiveTab('home'); setLoginTarget(null); setPasswordInput('');
       } else alert('密碼錯誤！');
   };
+
+  // !!!修復部分!!! 補回失蹤的 handleAddMember 與 handleChangePassword
+  const handleAddMember = async (newMember) => {
+      await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'members'), {
+          ...newMember, password: '888888', createdAt: serverTimestamp()
+      });
+      setShowAddMemberModal(false);
+  };
+
+  const handleChangePassword = async (newPassword) => {
+      if (!targetMemberId || !newPassword) return;
+      await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'members', targetMemberId), {
+          password: newPassword
+      });
+      setShowChangePasswordModal(false);
+  };
+  // !!!修復部分結束!!!
 
   const saveEvent = async (data) => {
     const payload = { ...data, updatedAt: serverTimestamp() };
@@ -702,8 +712,7 @@ export default function App() {
              </div>
              {dayEvents.length === 0 ? (
                  <div className="text-center text-slate-300 py-10 flex flex-col items-center">
-                     <div className="w-20 h-20 bg-slate-100 rounded-[2rem] flex items-center justify-center mb-4"><CalendarIcon size={32}/></div>
-                     <p className="font-bold italic">今天沒有安排事項</p>
+                     <div className="w-20 h-20 bg-slate-100 rounded-[2rem] flex items-center justify-center mb-4"><CalendarIcon size={32}/></div><p className="font-bold italic">今天沒有安排事項</p>
                  </div>
              ) : (
                  <div className="space-y-4">
@@ -712,10 +721,7 @@ export default function App() {
                          const isPast = new Date(`${ev.date}T${ev.endTime||'23:59'}`) < new Date();
                          return (
                            <div key={ev.id} onClick={() => { setEventFormData(ev); setShowEventModal(true); }} className={`flex gap-4 p-5 rounded-[2rem] border transition-transform active:scale-[0.98] cursor-pointer ${isPast ? 'opacity-50 bg-slate-50 border-slate-100' : 'bg-white shadow-sm border-slate-100'}`}>
-                              <div className="flex flex-col items-center justify-center w-16 border-r pr-4 border-slate-100">
-                                  <span className="text-sm font-black text-slate-800">{ev.startTime}</span>
-                                  {ev.endTime && <><div className="h-4 w-[2px] bg-slate-100 my-1"></div><span className="text-xs font-bold text-slate-400">{ev.endTime}</span></>}
-                              </div>
+                              <div className="flex flex-col items-center justify-center w-16 border-r pr-4 border-slate-100"><span className="text-sm font-black text-slate-800">{ev.startTime}</span>{ev.endTime && <><div className="h-4 w-[2px] bg-slate-100 my-1"></div><span className="text-xs font-bold text-slate-400">{ev.endTime}</span></>}</div>
                               <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 mb-1"><span className={`w-3 h-3 rounded-full ${cat.color.replace('text', 'bg').split(' ')[0]}`}></span><span className="font-black text-lg text-slate-800 truncate">{ev.title}</span></div>
                                   {ev.notes && <div className="text-xs font-bold text-slate-400 truncate mb-3">{ev.notes}</div>}
@@ -816,7 +822,8 @@ export default function App() {
           {currentUserRole.role === 'admin' && (
               <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-50">
                   <div className="flex justify-between items-center mb-6">
-                      <h3 className="font-black text-lg">家庭成員管理</h3><button onClick={() => setShowAddMemberModal(true)} className="text-xs bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-1 shadow-md active:scale-95"><Plus size={14}/> 新增成員</button>
+                      <h3 className="font-black text-lg">家庭成員管理</h3>
+                      <button onClick={() => setShowAddMemberModal(true)} className="text-xs bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-1 shadow-md active:scale-95"><Plus size={14}/> 新增成員</button>
                   </div>
                   <div className="space-y-3">
                       {members.map(m => (
@@ -825,9 +832,12 @@ export default function App() {
                                   <div className="text-3xl bg-white w-12 h-12 rounded-xl flex items-center justify-center shadow-sm">{m.avatar}</div>
                                   <div>
                                       <div className="font-black text-slate-800">{m.name}</div>
-                                      <div className="text-[10px] font-bold text-slate-400 uppercase flex gap-1 mt-1">{m.role === 'admin' ? <span className="text-indigo-500">管理員</span> : m.permissions?.map(p => <span key={p} className="bg-slate-200 px-1.5 py-0.5 rounded">{p}</span>)}</div>
+                                      <div className="text-[10px] font-bold text-slate-400 uppercase flex gap-1 mt-1">
+                                          {m.role === 'admin' ? <span className="text-indigo-500">管理員</span> : m.permissions?.map(p => <span key={p} className="bg-slate-200 px-1.5 py-0.5 rounded">{p}</span>)}
+                                      </div>
                                   </div>
                               </div>
+                              <button onClick={() => { setTargetMemberId(m.id); setShowChangePasswordModal(true); }} className="p-2 bg-white rounded-xl text-slate-400 hover:text-indigo-600 shadow-sm"><Key size={16}/></button>
                           </div>
                       ))}
                   </div>
@@ -859,7 +869,8 @@ export default function App() {
         <div className="grid grid-cols-2 gap-4 w-full max-w-sm">
           {members.map(m => (
             <button key={m.id} onClick={() => setLoginTarget(m)} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col items-center gap-3 active:scale-95 transition-all hover:border-indigo-200">
-              <span className="text-5xl drop-shadow-sm">{m.avatar}</span><span className="font-black text-slate-700">{m.name.split(' ')[0]}</span>
+              <span className="text-5xl drop-shadow-sm">{m.avatar}</span>
+              <span className="font-black text-slate-700">{m.name.split(' ')[0]}</span>
             </button>
           ))}
         </div>
@@ -911,10 +922,12 @@ export default function App() {
         </nav>
       </main>
 
+      <Tooltip hoveredEvent={hoveredEvent} categories={categories} members={members} />
       <EventFormModal isOpen={showEventModal} onClose={() => setShowEventModal(false)} onSave={saveEvent} onDelete={deleteItem} initialData={eventFormData} categories={categories} members={members} />
       <ExpenseFormModal isOpen={showExpenseModal} onClose={() => setShowExpenseModal(false)} onSave={saveExpense} onDelete={deleteItem} initialData={expenseFormData} />
       <TripWizard isOpen={showTripWizard} onClose={() => setShowTripWizard(false)} onFinish={finishTripWizard} members={members} />
       <AddMemberModal isOpen={showAddMemberModal} onClose={() => setShowAddMemberModal(false)} onAdd={handleAddMember} />
+      <ChangePasswordModal isOpen={showChangePasswordModal} onClose={() => setShowChangePasswordModal(false)} onConfirm={handleChangePassword} />
     </div>
   );
 }
