@@ -9,7 +9,7 @@ import {
   FileText, Printer, Save, CheckSquare, Square, Weight, Palette, Home, Shield, 
   Zap, DollarSign, Hotel, Bus, PieChart, TrendingUp, Wallet, Lock, LogOut, Key, Upload,
   Award, MinusCircle, ShoppingBag, PiggyBank, Target, BarChart2, Landmark, RefreshCw,
-  Repeat, Tag
+  Repeat, Tag, Filter
 } from 'lucide-react';
 
 // --- 1. Firebase Initialization ---
@@ -33,8 +33,8 @@ const EXCHANGE_RATE_CNY_HKD = 1.08;
 const DEFAULT_MEMBERS_SEED = [
     { name: '爸爸 (Charles)', role: 'admin', color: 'bg-blue-100 text-blue-800', password: '888888', avatar: '👨', permissions: ['home', 'calendar', 'expenses', 'travel', 'settings', 'cdollar'] },
     { name: '媽媽', role: 'admin', color: 'bg-pink-100 text-pink-800', password: '888888', avatar: '👩', permissions: ['home', 'calendar', 'expenses', 'travel', 'settings', 'cdollar'] },
-    { name: '女兒 (中五)', role: 'member', color: 'bg-purple-100 text-purple-800', password: '888888', avatar: '👧', permissions: ['home', 'calendar', 'travel', 'cdollar'] },
-    { name: '兒子 (中一)', role: 'member', color: 'bg-green-100 text-green-800', password: '888888', avatar: '👦', permissions: ['home', 'calendar', 'cdollar'] },
+    { name: '女兒 (中五)', role: 'member', color: 'bg-purple-100 text-purple-800', password: '888888', avatar: '👧', permissions: ['home', 'calendar', 'travel', 'cdollar', 'expenses'] },
+    { name: '兒子 (中一)', role: 'member', color: 'bg-green-100 text-green-800', password: '888888', avatar: '👦', permissions: ['home', 'calendar', 'cdollar', 'expenses'] },
 ];
 
 const DEFAULT_CATEGORIES = [
@@ -42,14 +42,25 @@ const DEFAULT_CATEGORIES = [
   { id: 'expense', name: '家庭開支', color: 'bg-orange-100 text-orange-800 border-orange-200', type: 'system' },
   { id: 'travel', name: '旅行計劃', color: 'bg-blue-100 text-blue-800 border-blue-200', type: 'system' },
   { id: 'school', name: '學校活動', color: 'bg-yellow-100 text-yellow-800 border-yellow-200', type: 'custom' },
+  { id: 'competition', name: '外出比賽', color: 'bg-purple-100 text-purple-800 border-purple-200', type: 'custom' },
 ];
 
 const DEFAULT_EXPENSE_CATEGORIES = ['樓宇', '信用卡', '保險', '日常', '貸款', '教育', '娛樂', '其他'];
 
-const POPULAR_DESTINATIONS = ['東京, 日本', '大阪, 日本', '台北, 台灣', '首爾, 韓國', '倫敦, 英國', '曼谷, 泰國', '新加坡'];
+const POPULAR_DESTINATIONS = ['東京, 日本', '大阪, 日本', '台北, 台灣', '首爾, 韓國', '倫敦, 英國', '曼谷, 泰國', '新加坡', '悉尼, 澳洲', '北京, 中國', '上海, 中國', '福岡, 日本', '札幌, 日本'];
 
-const HK_HOLIDAYS = { '2025-01-01': '元旦', '2025-01-29': '農曆年初一', '2025-01-30': '農曆年初二', '2025-04-04': '清明節', '2025-04-18': '耶穌受難節' };
-const LUNAR_DATA = [{ day: 1, text: '初一', ausp: '宜祭祀' }, { day: 15, text: '十五', ausp: '宜祈福' }, { day: 2, text: '初二', ausp: '宜出行' }, { day: 8, text: '初八', ausp: '諸事不宜' }];
+const HK_HOLIDAYS = {
+  '2025-01-01': '元旦', '2025-01-29': '農曆年初一', '2025-01-30': '農曆年初二', '2025-01-31': '農曆年初三',
+  '2025-04-04': '清明節', '2025-04-18': '耶穌受難節', '2025-04-19': '耶穌受難節翌日', '2025-04-21': '復活節一',
+  '2025-05-01': '勞動節', '2025-05-05': '佛誕', '2025-05-31': '端午節', '2025-07-01': '特區紀念日',
+  '2025-10-01': '國慶', '2025-10-07': '中秋翌日', '2025-10-29': '重陽節', '2025-12-25': '聖誕節', '2025-12-26': '拆禮物日',
+  '2026-01-01': '元旦', '2026-02-17': '農曆年初一', '2026-02-18': '農曆年初二', '2026-02-19': '農曆年初三',
+  '2026-04-03': '耶穌受難節', '2026-04-04': '清明節', '2026-04-06': '復活節一', '2026-05-01': '勞動節',
+  '2026-05-24': '佛誕', '2026-06-19': '端午節', '2026-07-01': '特區紀念日', '2026-10-01': '國慶',
+  '2026-09-26': '中秋翌日', '2026-10-18': '重陽節', '2026-12-25': '聖誕節', '2026-12-26': '拆禮物日'
+};
+
+const LUNAR_DATA = [{ day: 1, text: '初一', ausp: '宜祭祀 祈福' }, { day: 15, text: '十五', ausp: '宜祭祀' }, { day: 2, text: '初二', ausp: '宜出行' }, { day: 8, text: '初八', ausp: '諸事不宜' }, { day: 16, text: '十六', ausp: '宜開市' }, { day: 23, text: '廿三', ausp: '宜大掃除' }];
 
 const SEED_SHOP_ITEMS = [
     { title: '遊戲時間 1 小時', cost: 50, icon: '🎮' }, { title: '免做一次家務', cost: 100, icon: '🧹' },
@@ -75,8 +86,12 @@ const convertToHKD = (cdollar) => `$${(cdollar * EXCHANGE_RATE_CNY_HKD).toLocale
 const getLunarInfo = (date) => {
   const day = date.getDate(); const special = LUNAR_DATA.find(d => d.day === day);
   if (special) return { dayText: special.text, auspicious: special.ausp };
-  return { dayText: (day - 1) % 30 === 0 ? '初一' : `${(day - 1) % 30 + 1}`, auspicious: (day % 5 === 0) ? '宜會友' : '' };
+  const idx = (day - 1) % 30;
+  const randAusp = (day % 5 === 0) ? '宜會友' : (day % 7 === 0 ? '忌遠行' : '');
+  return { dayText: idx === 0 ? '初一' : `${idx + 1}`, auspicious: randAusp };
 };
+const isDateInRange = (dateStr, startDateStr, endDateStr) => dateStr >= startDateStr && dateStr <= endDateStr;
+const getDaysDiff = (start, end) => Math.ceil(Math.abs(new Date(end) - new Date(start)) / (1000 * 60 * 60 * 24)) + 1;
 const calculatePackingProgress = (list) => {
     if (!list) return 0; let total = 0, packed = 0;
     (list.shared || []).forEach(i => { total++; if(i.packed) packed++; });
@@ -86,14 +101,35 @@ const calculatePackingProgress = (list) => {
 
 // --- 3. Sub-Components ---
 
-// Dashboard (首頁)
-const DashboardView = ({ currentUser, members, wallets, events, trips, setActiveTab }) => {
+// Dashboard (首頁) - 新增了個人當月開支卡片
+const DashboardView = ({ currentUser, members, wallets, events, trips, expenses, setActiveTab }) => {
     const today = formatDate(new Date());
+    const currentYear = new Date().getFullYear();
+    const currentMonth = new Date().getMonth();
+    
     const upcomingEvents = events.filter(e => e.date >= today && (e.participants || []).includes(currentUser.id)).sort((a,b) => a.date.localeCompare(b.date)).slice(0, 3);
     const activeTrips = trips.filter(t => t.endDate >= today).sort((a,b) => a.startDate.localeCompare(b.startDate)).slice(0, 1);
+    
     const myWallet = wallets[currentUser.id] || { balance: 0, savings: 0, invested: 0 };
     const totalAssets = myWallet.balance + myWallet.savings + (myWallet.invested || 0);
     const isAdmin = currentUser.role === 'admin';
+
+    // 計算個人本月開支
+    const myDisplayExpenses = expenses.filter(e => e.memberId === currentUser.id).map(e => {
+        let periodKey = ''; let amountMultiplier = 1; let isApplicable = false;
+        const eDate = new Date(e.date || new Date().toISOString());
+        switch (e.recurringPeriod) {
+            case 'daily': isApplicable = true; amountMultiplier = 30; periodKey = `paid_${currentYear}_${currentMonth}_daily`; break;
+            case 'weekly': isApplicable = true; amountMultiplier = 4; periodKey = `paid_${currentYear}_${currentMonth}_weekly`; break;
+            case 'monthly': isApplicable = true; periodKey = `paid_${currentYear}_${currentMonth}_monthly`; break;
+            case 'yearly': isApplicable = eDate.getMonth() === currentMonth; periodKey = `paid_${currentYear}_${currentMonth}_yearly`; break;
+            default: isApplicable = eDate.getFullYear() === currentYear && eDate.getMonth() === currentMonth; periodKey = `paid_${e.id}_oneoff`; break;
+        }
+        return { ...e, calculatedAmount: (e.amount || 0) * amountMultiplier, periodKey, isApplicable };
+    }).filter(e => e.isApplicable);
+
+    const myTotalBudget = myDisplayExpenses.reduce((sum, e) => sum + e.calculatedAmount, 0);
+    const myPaidAmount = myDisplayExpenses.reduce((sum, e) => sum + ((e.paidPeriods || []).includes(e.periodKey) ? e.calculatedAmount : 0), 0);
 
     return (
         <div className="space-y-6 pb-10">
@@ -106,29 +142,30 @@ const DashboardView = ({ currentUser, members, wallets, events, trips, setActive
                         <p className="text-sm font-bold opacity-80">{isAdmin ? '家庭管理員，準備好今天的安排了嗎？' : '準備好完成今天的任務了嗎？'}</p>
                     </div>
                 </div>
-                {(currentUser.permissions || []).includes('cdollar') && (
-                    <div onClick={() => setActiveTab('cdollar')} className="bg-white/10 rounded-2xl p-4 backdrop-blur-md flex flex-col gap-3 cursor-pointer hover:bg-white/20 transition">
-                        <div className="flex justify-between items-end border-b border-white/20 pb-3">
-                            <div>
-                                <p className="text-[10px] font-black uppercase tracking-widest opacity-80 mb-1">{isAdmin ? '全家金融看板' : '我的總資產 (C-Dollar)'}</p>
-                                <p className="text-3xl font-black italic tracking-tighter drop-shadow-md">{isAdmin ? '管理模式' : formatCDollar(totalAssets)}</p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {/* C-Dollar 卡片 */}
+                    {(currentUser.permissions || []).includes('cdollar') && (
+                        <div onClick={() => setActiveTab('cdollar')} className="bg-white/10 rounded-2xl p-4 backdrop-blur-md flex flex-col gap-2 cursor-pointer hover:bg-white/20 transition">
+                            <div className="flex justify-between items-center">
+                                <p className="text-[10px] font-black uppercase tracking-widest opacity-80 flex items-center gap-1"><Award size={12}/> {isAdmin ? '家庭金融看板' : '總資產 (C-Dollar)'}</p>
+                                {!isAdmin && <p className="text-[9px] opacity-80">{convertToHKD(totalAssets)}</p>}
                             </div>
-                            {!isAdmin && (
-                                <div className="text-right">
-                                    <p className="text-[10px] font-black uppercase tracking-widest opacity-80 mb-1 flex items-center justify-end gap-1"><RefreshCw size={10}/> 折合港幣</p>
-                                    <p className="text-lg font-bold italic drop-shadow-md">{convertToHKD(totalAssets)}</p>
-                                </div>
-                            )}
+                            <p className="text-2xl font-black italic tracking-tighter drop-shadow-md">{isAdmin ? '管理模式' : formatCDollar(totalAssets)}</p>
                         </div>
-                        {!isAdmin && (
-                            <div className="grid grid-cols-3 gap-2 text-center text-xs font-bold">
-                                <div><p className="opacity-60 mb-0.5">可用餘額</p><p>{formatCDollar(myWallet.balance)}</p></div>
-                                <div className="border-l border-white/20"><p className="opacity-60 mb-0.5">銀行存款</p><p>{formatCDollar(myWallet.savings)}</p></div>
-                                <div className="border-l border-white/20"><p className="opacity-60 mb-0.5">投資理財</p><p>{formatCDollar(myWallet.invested)}</p></div>
+                    )}
+                    
+                    {/* 個人開支卡片 */}
+                    {(currentUser.permissions || []).includes('expenses') && !isAdmin && (
+                        <div onClick={() => setActiveTab('expenses')} className="bg-orange-500/20 rounded-2xl p-4 backdrop-blur-md flex flex-col gap-2 cursor-pointer hover:bg-orange-500/30 transition border border-orange-400/30">
+                            <div className="flex justify-between items-center">
+                                <p className="text-[10px] font-black uppercase tracking-widest opacity-90 flex items-center gap-1 text-orange-100"><CreditCard size={12}/> 本月個人花費</p>
+                                <p className="text-[9px] opacity-90 text-orange-200">已付 {formatMoney(myPaidAmount)}</p>
                             </div>
-                        )}
-                    </div>
-                )}
+                            <p className="text-2xl font-black italic tracking-tighter drop-shadow-md text-orange-50">{formatMoney(myTotalBudget)}</p>
+                        </div>
+                    )}
+                </div>
             </div>
 
             <div>
@@ -146,10 +183,10 @@ const DashboardView = ({ currentUser, members, wallets, events, trips, setActive
                             <div className="flex-1 min-w-0">
                                 <p className="font-black text-slate-800 text-lg truncate">{ev.title}</p>
                                 <p className="text-xs font-bold text-slate-400 flex items-center gap-1"><Clock size={12}/> {ev.startTime} {ev.notes ? `· ${ev.notes}` : ''}</p>
-                                <div className="flex items-center gap-1 mt-2">
+                                <div className="flex items-center -space-x-1.5 mt-2">
                                     {ev.participants?.map(pId => {
                                         const mem = members.find(m => m.id === pId);
-                                        return mem ? <div key={pId} className="w-6 h-6 rounded-full overflow-hidden bg-slate-50 border border-slate-200 text-xs flex items-center justify-center shadow-sm" title={mem.name}>{mem.avatar}</div> : null;
+                                        return mem ? <div key={pId} className="w-6 h-6 rounded-full overflow-hidden bg-slate-50 border-2 border-white text-[10px] flex items-center justify-center shadow-sm relative z-10" title={mem.name}>{mem.avatar}</div> : null;
                                     })}
                                 </div>
                             </div>
@@ -177,7 +214,7 @@ const DashboardView = ({ currentUser, members, wallets, events, trips, setActive
     );
 };
 
-// C-Dollar 視圖
+// 財商核心：C-Dollar 視圖
 const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
     const [transactions, setTransactions] = useState([]);
     const [requests, setRequests] = useState([]);
@@ -246,7 +283,6 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
         const finalSavings = edits.savings !== undefined ? edits.savings : currentWallet.savings;
 
         await setDoc(doc(db, 'artifacts', appId, 'users', userId, 'cdollar_wallets', memberId), { balance: finalBalance, savings: finalSavings, memberId }, { merge: true });
-        
         setAdminBankInputs(prev => { const next = { ...prev }; delete next[memberId]; return next; });
         alert('修改成功！');
     };
@@ -515,8 +551,8 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
     );
 };
 
-// --- Modals (Form, Settings, etc) ---
-const ExpenseFormModal = ({ isOpen, onClose, onSave, onDelete, initialData, members, expenseCategories }) => {
+// --- Modals ---
+const ExpenseFormModal = ({ isOpen, onClose, onSave, onDelete, initialData, members, expenseCategories, historicalNames }) => {
     const [formData, setFormData] = useState({ ...initialData, memberId: initialData?.memberId || (members.length > 0 ? members[0].id : '') }); 
     useEffect(() => { setFormData({ ...initialData, memberId: initialData?.memberId || (members.length > 0 ? members[0].id : '') }); }, [initialData, members]); 
     if (!isOpen) return null;
@@ -535,7 +571,11 @@ const ExpenseFormModal = ({ isOpen, onClose, onSave, onDelete, initialData, memb
                 </div>
             </div>
             
-            <input className="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="開支內容 (如：大埔管理費)"/>
+            {/* 新增歷史紀錄 Autocomplete */}
+            <input list="expense-names" className="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="開支內容 (輸入以搜尋歷史紀錄)"/>
+            <datalist id="expense-names">
+                {historicalNames.map((n, i) => <option key={i} value={n} />)}
+            </datalist>
             
             <div className="flex gap-2">
                 <div className="relative flex-1">
@@ -690,6 +730,11 @@ export default function App() {
   const [calendarView, setCalendarView] = useState('month'); 
   const [hoveredEvent, setHoveredEvent] = useState(null); 
 
+  // 新增：開支時間篩選器與使用者篩選器
+  const [expenseMonth, setExpenseMonth] = useState(new Date().getMonth());
+  const [expenseYear, setExpenseYear] = useState(new Date().getFullYear());
+  const [expenseViewMember, setExpenseViewMember] = useState('all');
+
   const [showEventModal, setShowEventModal] = useState(false);
   const [showExpenseModal, setShowExpenseModal] = useState(false);
   const [showTripWizard, setShowTripWizard] = useState(false);
@@ -701,6 +746,11 @@ export default function App() {
   const [editingMember, setEditingMember] = useState(null);
   const [eventFormData, setEventFormData] = useState({});
   const [expenseFormData, setExpenseFormData] = useState({});
+
+  // 擷取歷史開支名稱以供 Autocomplete 使用
+  const historicalExpenseNames = useMemo(() => {
+      return [...new Set(expenses.map(e => e.name).filter(Boolean))];
+  }, [expenses]);
 
   const NAV_ITEMS = [
     { id: 'home', icon: Home, label: '首頁', perm: 'home' },
@@ -731,7 +781,6 @@ export default function App() {
         const d = {}; snap.docs.forEach(doc => d[doc.id] = { balance: doc.data().balance || 0, savings: doc.data().savings || 0, invested: doc.data().invested || 0 });
         setWallets(d);
     });
-    // 讀取設定中的自定義開支類型
     const unsubSettings = onSnapshot(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'expenses'), docSnap => {
         if (docSnap.exists() && docSnap.data().categories) setExpenseCategories(docSnap.data().categories);
     });
@@ -751,7 +800,6 @@ export default function App() {
 
   const saveEvent = async (data) => { const payload = { ...data, updatedAt: serverTimestamp() }; if (data.id) await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'events', data.id), payload); else await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'events'), { ...payload, createdAt: serverTimestamp() }); setShowEventModal(false); };
   
-  // 保存開支
   const saveExpense = async (data) => { 
       const payload = { ...data, amount: Number(data.amount) || 0, updatedAt: serverTimestamp() };
       if (data.id) await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'expenses', data.id), payload); 
@@ -769,7 +817,6 @@ export default function App() {
       setShowTripWizard(false);
   };
   
-  // 切換已付狀態
   const handleToggleExpensePaid = async (expenseId, periodKey) => {
     const expense = expenses.find(e => e.id === expenseId);
     const paidPeriods = expense.paidPeriods || [];
@@ -778,7 +825,6 @@ export default function App() {
     await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'expenses', expenseId), { paidPeriods: newPaidPeriods });
   };
 
-  // 開支分類設定
   const addExpCat = async () => {
       const newCat = prompt('輸入新的開支類型名稱：');
       if (newCat && !expenseCategories.includes(newCat)) {
@@ -894,25 +940,25 @@ export default function App() {
   };
 
   const renderExpenses = () => {
-     const currentYear = currentDate.getFullYear();
-     const currentMonth = currentDate.getMonth(); // 0-11
+     // 取出篩選目標 (Admin 才能切換所有人)
+     const viewMemberId = currentUserRole.role === 'admin' ? expenseViewMember : currentUserRole.id;
      
-     // 動態計算當月開支
-     const displayExpenses = expenses.map(e => {
+     // 根據時間區間推算應呈現的預算
+     const displayExpenses = expenses.filter(e => viewMemberId === 'all' || e.memberId === viewMemberId).map(e => {
         let periodKey = ''; let amountMultiplier = 1; let isApplicable = false;
         const eDate = new Date(e.date || new Date().toISOString());
         
         switch (e.recurringPeriod) {
             case 'daily':
-                isApplicable = true; amountMultiplier = 30; periodKey = `paid_${currentYear}_${currentMonth}_daily`; break;
+                isApplicable = true; amountMultiplier = 30; periodKey = `paid_${expenseYear}_${expenseMonth}_daily`; break;
             case 'weekly':
-                isApplicable = true; amountMultiplier = 4; periodKey = `paid_${currentYear}_${currentMonth}_weekly`; break;
+                isApplicable = true; amountMultiplier = 4; periodKey = `paid_${expenseYear}_${expenseMonth}_weekly`; break;
             case 'monthly':
-                isApplicable = true; periodKey = `paid_${currentYear}_${currentMonth}_monthly`; break;
+                isApplicable = true; periodKey = `paid_${expenseYear}_${expenseMonth}_monthly`; break;
             case 'yearly':
-                isApplicable = eDate.getMonth() === currentMonth; periodKey = `paid_${currentYear}_${currentMonth}_yearly`; break;
-            default: // none
-                isApplicable = eDate.getFullYear() === currentYear && eDate.getMonth() === currentMonth; periodKey = `paid_${e.id}_oneoff`; break;
+                isApplicable = eDate.getMonth() === expenseMonth; periodKey = `paid_${expenseYear}_${expenseMonth}_yearly`; break;
+            default: // 單次 none
+                isApplicable = eDate.getFullYear() === expenseYear && eDate.getMonth() === expenseMonth; periodKey = `paid_${e.id}_oneoff`; break;
         }
         
         return { ...e, calculatedAmount: (e.amount || 0) * amountMultiplier, periodKey, isApplicable, displayDate: eDate.getDate() };
@@ -924,8 +970,26 @@ export default function App() {
      
      return (
         <div className="h-full overflow-y-auto pb-10">
-           <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-black text-slate-800">家庭開支</h2><button onClick={() => {setExpenseFormData({recurringPeriod: 'monthly', category: expenseCategories[0], date: formatDate(new Date())}); setShowExpenseModal(true);}} className="bg-indigo-600 text-white p-3 rounded-2xl shadow-lg shadow-indigo-200 active:scale-95"><Plus size={20}/></button></div>
+           <div className="flex justify-between items-center mb-4">
+               <h2 className="text-2xl font-black text-slate-800">家庭開支</h2>
+               <button onClick={() => {setExpenseFormData({recurringPeriod: 'monthly', category: expenseCategories[0], date: formatDate(new Date())}); setShowExpenseModal(true);}} className="bg-indigo-600 text-white p-3 rounded-2xl shadow-lg shadow-indigo-200 active:scale-95"><Plus size={20}/></button>
+           </div>
            
+           {/* 時間與成員篩選器 */}
+           <div className="flex flex-wrap gap-2 mb-6">
+               <div className="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-1 shadow-sm">
+                   <Filter size={14} className="text-slate-400 mr-2"/>
+                   <input type="month" value={`${expenseYear}-${String(expenseMonth+1).padStart(2,'0')}`} onChange={(e) => { const [y, m] = e.target.value.split('-'); setExpenseYear(Number(y)); setExpenseMonth(Number(m)-1); }} className="border-none outline-none font-bold text-slate-700 text-sm bg-transparent cursor-pointer" />
+               </div>
+               
+               {currentUserRole.role === 'admin' && (
+                   <select value={expenseViewMember} onChange={e => setExpenseViewMember(e.target.value)} className="bg-white border border-slate-200 rounded-xl px-3 py-1 shadow-sm font-bold text-slate-700 text-sm outline-none">
+                       <option value="all">全家綜合開支</option>
+                       {members.map(m => <option key={m.id} value={m.id}>{m.name}的開支</option>)}
+                   </select>
+               )}
+           </div>
+
            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
               <div className="bg-indigo-50 rounded-[2rem] p-6 shadow-sm"><span className="text-xs text-indigo-500 font-black uppercase mb-1 flex items-center gap-1"><PieChart size={14}/> 當月預估總計</span><span className="text-3xl font-black text-indigo-900">{formatMoney(totalBudget)}</span></div>
               <div className="bg-green-50 rounded-[2rem] p-6 shadow-sm"><span className="text-xs text-green-500 font-black uppercase mb-1 flex items-center gap-1"><CheckSquare size={14}/> 已付</span><span className="text-3xl font-black text-green-700">{formatMoney(paidAmount)}</span></div>
@@ -1091,7 +1155,7 @@ export default function App() {
         </header>
 
         <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-32">
-          {activeTab === 'home' && <DashboardView currentUser={currentUserRole} members={members} wallets={wallets} events={events} trips={trips} setActiveTab={setActiveTab} />}
+          {activeTab === 'home' && <DashboardView currentUser={currentUserRole} members={members} wallets={wallets} events={events} trips={trips} expenses={expenses} setActiveTab={setActiveTab} />}
           {activeTab === 'calendar' && renderCalendar()}
           {activeTab === 'cdollar' && <CDollarView currentUser={currentUserRole} members={members} wallets={wallets} db={db} userId={user.uid} />}
           {activeTab === 'expenses' && renderExpenses()}
@@ -1114,7 +1178,7 @@ export default function App() {
 
       <Tooltip hoveredEvent={hoveredEvent} categories={categories} />
       <EventFormModal isOpen={showEventModal} onClose={() => setShowEventModal(false)} onSave={saveEvent} onDelete={deleteItem} initialData={eventFormData} categories={categories} members={members} />
-      <ExpenseFormModal isOpen={showExpenseModal} onClose={() => setShowExpenseModal(false)} onSave={saveExpense} onDelete={deleteItem} initialData={expenseFormData} members={members} expenseCategories={expenseCategories} />
+      <ExpenseFormModal isOpen={showExpenseModal} onClose={() => setShowExpenseModal(false)} onSave={saveExpense} onDelete={deleteItem} initialData={expenseFormData} members={members} expenseCategories={expenseCategories} historicalNames={historicalExpenseNames} />
       <TripWizard isOpen={showTripWizard} onClose={() => setShowTripWizard(false)} onFinish={finishTripWizard} members={members} />
       <AddMemberModal isOpen={showAddMemberModal} onClose={() => setShowAddMemberModal(false)} onAdd={handleAddMember} />
       <ChangePasswordModal isOpen={showChangePasswordModal} onClose={() => setShowChangePasswordModal(false)} onConfirm={handleChangePassword} />
