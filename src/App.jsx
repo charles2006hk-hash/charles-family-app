@@ -8,7 +8,8 @@ import {
   ChevronLeft, ChevronRight, Info, Luggage, Briefcase, Coffee, AlertCircle, 
   FileText, Printer, Save, CheckSquare, Square, Weight, Palette, Home, Shield, 
   Zap, DollarSign, Hotel, Bus, PieChart, TrendingUp, Wallet, Lock, LogOut, Key, Upload,
-  Award, MinusCircle, ShoppingBag, PiggyBank, Target, BarChart2, Landmark, RefreshCw
+  Award, MinusCircle, ShoppingBag, PiggyBank, Target, BarChart2, Landmark, RefreshCw,
+  Repeat, Tag
 } from 'lucide-react';
 
 // --- 1. Firebase Initialization ---
@@ -27,7 +28,6 @@ const db = getFirestore(app);
 const appId = 'charles-family-app';
 
 // --- 2. Constants & Core Data ---
-// 模擬實時人民幣兌港幣匯率
 const EXCHANGE_RATE_CNY_HKD = 1.08; 
 
 const DEFAULT_MEMBERS_SEED = [
@@ -42,27 +42,14 @@ const DEFAULT_CATEGORIES = [
   { id: 'expense', name: '家庭開支', color: 'bg-orange-100 text-orange-800 border-orange-200', type: 'system' },
   { id: 'travel', name: '旅行計劃', color: 'bg-blue-100 text-blue-800 border-blue-200', type: 'system' },
   { id: 'school', name: '學校活動', color: 'bg-yellow-100 text-yellow-800 border-yellow-200', type: 'custom' },
-  { id: 'competition', name: '外出比賽', color: 'bg-purple-100 text-purple-800 border-purple-200', type: 'custom' },
 ];
 
-const POPULAR_DESTINATIONS = ['東京, 日本', '大阪, 日本', '台北, 台灣', '首爾, 韓國', '倫敦, 英國', '曼谷, 泰國', '新加坡', '悉尼, 澳洲', '北京, 中國', '上海, 中國', '福岡, 日本', '札幌, 日本'];
+const DEFAULT_EXPENSE_CATEGORIES = ['樓宇', '信用卡', '保險', '日常', '貸款', '教育', '娛樂', '其他'];
 
-const HK_HOLIDAYS = {
-  '2025-01-01': '元旦', '2025-01-29': '農曆年初一', '2025-01-30': '農曆年初二', '2025-01-31': '農曆年初三',
-  '2025-04-04': '清明節', '2025-04-18': '耶穌受難節', '2025-04-19': '耶穌受難節翌日', '2025-04-21': '復活節一',
-  '2025-05-01': '勞動節', '2025-05-05': '佛誕', '2025-05-31': '端午節', '2025-07-01': '特區紀念日',
-  '2025-10-01': '國慶', '2025-10-07': '中秋翌日', '2025-10-29': '重陽節', '2025-12-25': '聖誕節', '2025-12-26': '拆禮物日',
-  '2026-01-01': '元旦', '2026-02-17': '農曆年初一', '2026-02-18': '農曆年初二', '2026-02-19': '農曆年初三',
-  '2026-04-03': '耶穌受難節', '2026-04-04': '清明節', '2026-04-06': '復活節一', '2026-05-01': '勞動節',
-  '2026-05-24': '佛誕', '2026-06-19': '端午節', '2026-07-01': '特區紀念日', '2026-10-01': '國慶',
-  '2026-09-26': '中秋翌日', '2026-10-18': '重陽節', '2026-12-25': '聖誕節', '2026-12-26': '拆禮物日'
-};
+const POPULAR_DESTINATIONS = ['東京, 日本', '大阪, 日本', '台北, 台灣', '首爾, 韓國', '倫敦, 英國', '曼谷, 泰國', '新加坡'];
 
-const LUNAR_DATA = [{ day: 1, text: '初一', ausp: '宜祭祀 祈福' }, { day: 15, text: '十五', ausp: '宜祭祀' }, { day: 2, text: '初二', ausp: '宜出行' }, { day: 8, text: '初八', ausp: '諸事不宜' }, { day: 16, text: '十六', ausp: '宜開市' }, { day: 23, text: '廿三', ausp: '宜大掃除' }];
-
-const INITIAL_EXPENSES = [
-  { name: '大埔帝欣苑 (供款)', amount: 19038, day: 15, category: '樓宇', bank: 'DBS', type: 'recurring_monthly' }, { name: '大埔帝欣苑 (管理費)', amount: 2500, day: 15, category: '樓宇', bank: 'DBS', type: 'recurring_monthly' }, { name: '九龍農圃道 (供款)', amount: 26207, day: 15, category: '樓宇', bank: 'DBS', type: 'recurring_monthly' }, { name: '九龍農圃道 (管理費)', amount: 4200, day: 15, category: '樓宇', bank: 'DBS', type: 'recurring_monthly' }, { name: '大埔太湖花園7座 (供款)', amount: 13923, day: 15, category: '樓宇', bank: 'DBS', type: 'recurring_monthly' }, { name: '大埔太湖花園5座 (供款)', amount: 12668, day: 15, category: '樓宇', bank: '大新', type: 'recurring_monthly' }, { name: '科學園嘉熙 (供款)', amount: 10891, day: 15, category: '樓宇', bank: '大新', type: 'recurring_monthly' }, { name: '譚公道 (供款)', amount: 10891, day: 15, category: '樓宇', bank: '恆生', type: 'recurring_monthly' }, { name: '私人貸款 (Autopay)', amount: 13995, day: 15, category: '貸款', bank: '大新', type: 'recurring_monthly' }, { name: 'Citibank Club Master', day: 21, category: '信用卡', bank: 'Citibank', type: 'recurring_monthly' }, { name: 'DBS Visa (Target)', day: 10, amount: 50000, category: '信用卡', bank: 'DBS', type: 'recurring_monthly' }, { name: 'AXA 醫療 (Jason)', amount: 2384.83, month: 2, day: 21, category: '保險', type: 'recurring_yearly' }, { name: 'AXA 人壽 (Charles)', amount: 106739.68, month: 10, day: 22, category: '保險', type: 'recurring_yearly' }, { name: '農圃車位租金', amount: 3600, day: 1, category: '日常', bank: 'HSBC', type: 'recurring_monthly' }, { name: '農圃水費', amount: 1000, day: 1, category: '日常', type: 'recurring_monthly' }
-];
+const HK_HOLIDAYS = { '2025-01-01': '元旦', '2025-01-29': '農曆年初一', '2025-01-30': '農曆年初二', '2025-04-04': '清明節', '2025-04-18': '耶穌受難節' };
+const LUNAR_DATA = [{ day: 1, text: '初一', ausp: '宜祭祀' }, { day: 15, text: '十五', ausp: '宜祈福' }, { day: 2, text: '初二', ausp: '宜出行' }, { day: 8, text: '初八', ausp: '諸事不宜' }];
 
 const SEED_SHOP_ITEMS = [
     { title: '遊戲時間 1 小時', cost: 50, icon: '🎮' }, { title: '免做一次家務', cost: 100, icon: '🧹' },
@@ -81,25 +68,15 @@ const SEED_INVESTMENTS = [
 ];
 
 const formatDate = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-
-// 修改：真實金錢加上 $ 與千分位
 const formatMoney = (amount) => (amount !== undefined && amount !== null) ? `$${Math.round(amount).toLocaleString()}` : '$0';
-
-// 新增：C-Dollar 專屬符號 C$ 與千分位
 const formatCDollar = (amount) => (amount !== undefined && amount !== null) ? `C$ ${Math.round(amount).toLocaleString()}` : 'C$ 0';
-
-// 匯率折算功能 (保持不變，但加上千分位)
 const convertToHKD = (cdollar) => `$${(cdollar * EXCHANGE_RATE_CNY_HKD).toLocaleString(undefined, {minimumFractionDigits: 1, maximumFractionDigits: 1})}`;
 
 const getLunarInfo = (date) => {
   const day = date.getDate(); const special = LUNAR_DATA.find(d => d.day === day);
   if (special) return { dayText: special.text, auspicious: special.ausp };
-  const idx = (day - 1) % 30;
-  const randAusp = (day % 5 === 0) ? '宜會友' : (day % 7 === 0 ? '忌遠行' : '');
-  return { dayText: idx === 0 ? '初一' : `${idx + 1}`, auspicious: randAusp };
+  return { dayText: (day - 1) % 30 === 0 ? '初一' : `${(day - 1) % 30 + 1}`, auspicious: (day % 5 === 0) ? '宜會友' : '' };
 };
-const isDateInRange = (dateStr, startDateStr, endDateStr) => dateStr >= startDateStr && dateStr <= endDateStr;
-const getDaysDiff = (start, end) => Math.ceil(Math.abs(new Date(end) - new Date(start)) / (1000 * 60 * 60 * 24)) + 1;
 const calculatePackingProgress = (list) => {
     if (!list) return 0; let total = 0, packed = 0;
     (list.shared || []).forEach(i => { total++; if(i.packed) packed++; });
@@ -109,16 +86,10 @@ const calculatePackingProgress = (list) => {
 
 // --- 3. Sub-Components ---
 
-// Dashboard (首頁) - 已優化個人日程過濾與頭像顯示
+// Dashboard (首頁)
 const DashboardView = ({ currentUser, members, wallets, events, trips, setActiveTab }) => {
     const today = formatDate(new Date());
-    
-    // 修復 1：過濾出 date >= 今天，且 participants 陣列中包含目前登入者 (currentUser.id) 的行程
-    const upcomingEvents = events
-        .filter(e => e.date >= today && (e.participants || []).includes(currentUser.id))
-        .sort((a,b) => a.date.localeCompare(b.date))
-        .slice(0, 3);
-        
+    const upcomingEvents = events.filter(e => e.date >= today && (e.participants || []).includes(currentUser.id)).sort((a,b) => a.date.localeCompare(b.date)).slice(0, 3);
     const activeTrips = trips.filter(t => t.endDate >= today).sort((a,b) => a.startDate.localeCompare(b.startDate)).slice(0, 1);
     const myWallet = wallets[currentUser.id] || { balance: 0, savings: 0, invested: 0 };
     const totalAssets = myWallet.balance + myWallet.savings + (myWallet.invested || 0);
@@ -175,7 +146,6 @@ const DashboardView = ({ currentUser, members, wallets, events, trips, setActive
                             <div className="flex-1 min-w-0">
                                 <p className="font-black text-slate-800 text-lg truncate">{ev.title}</p>
                                 <p className="text-xs font-bold text-slate-400 flex items-center gap-1"><Clock size={12}/> {ev.startTime} {ev.notes ? `· ${ev.notes}` : ''}</p>
-                                {/* 修復 2：在首頁的日程列表中，清晰顯示參與該行程的成員頭像 */}
                                 <div className="flex items-center gap-1 mt-2">
                                     {ev.participants?.map(pId => {
                                         const mem = members.find(m => m.id === pId);
@@ -207,7 +177,7 @@ const DashboardView = ({ currentUser, members, wallets, events, trips, setActive
     );
 };
 
-// 財商核心：C-Dollar 視圖
+// C-Dollar 視圖
 const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
     const [transactions, setTransactions] = useState([]);
     const [requests, setRequests] = useState([]);
@@ -350,7 +320,6 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
 
     return (
         <div className="flex flex-col h-full bg-slate-50 overflow-hidden">
-            {/* Header Area */}
             <div className="p-4 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-b-[2rem] shadow-lg text-white mb-4 relative overflow-hidden shrink-0">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full -mr-10 -mt-10 blur-xl"></div>
                 <div className="flex justify-between items-center mb-6 pt-2">
@@ -382,7 +351,6 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                 )}
             </div>
 
-            {/* Nav Tabs */}
             <div className="flex px-4 gap-2 mb-2 overflow-x-auto pb-2 shrink-0 hide-scrollbar">
                 {[{id:'tasks',icon:Target,label:'任務'}, {id:'shop',icon:ShoppingBag,label:'商城'}, {id:'invest',icon:BarChart2,label:'理財'}, {id:'bank',icon:Landmark,label:'銀行'}, {id:'wallet',icon:Wallet,label:'審批與明細', alert: pendingRequests.length > 0}].map(t => (
                     <button key={t.id} onClick={() => setActiveSubTab(t.id)} className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-black whitespace-nowrap transition-all relative ${activeSubTab === t.id ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-slate-500 border border-slate-100 hover:bg-slate-50'}`}>
@@ -392,30 +360,27 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                 ))}
             </div>
 
-            {/* Content Area */}
             <div className="flex-1 overflow-y-auto px-4 space-y-4 pb-32">
-                {/* 審批與紀錄 (Wallet Tab) */}
                 {activeSubTab === 'wallet' && (
                     <div className="space-y-6">
-                        {/* 審批區域 */}
-                        <div className="bg-orange-50 border border-orange-100 p-4 rounded-2xl">
-                            <h4 className="font-black text-orange-800 mb-3 flex items-center gap-2"><Bell size={16}/> {isAdmin ? '待處理申請 (家長審批)' : '我的申請進度'}</h4>
-                            <div className="space-y-3">
-                                {pendingRequests.length > 0 ? pendingRequests.map(req => (
-                                    <div key={req.id} className="bg-white p-3 rounded-xl shadow-sm flex justify-between items-center border border-orange-100/50">
-                                        <div>
-                                            <p className="font-bold text-slate-800 text-sm">{isAdmin && <span className="text-indigo-600 mr-1">{req.memberName}</span>}{req.title}</p>
-                                            <p className={`font-black text-xs italic ${req.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>{req.amount > 0 ? '+' : ''}{formatCDollar(Math.abs(req.amount))}</p>
+                        {pendingRequests.length > 0 && (
+                            <div className="bg-orange-50 border border-orange-100 p-4 rounded-2xl">
+                                <h4 className="font-black text-orange-800 mb-3 flex items-center gap-2"><Bell size={16}/> {isAdmin ? '待處理申請 (家長審批)' : '我的申請進度'}</h4>
+                                <div className="space-y-3">
+                                    {pendingRequests.map(req => (
+                                        <div key={req.id} className="bg-white p-3 rounded-xl shadow-sm flex justify-between items-center border border-orange-100/50">
+                                            <div>
+                                                <p className="font-bold text-slate-800 text-sm">{isAdmin && <span className="text-indigo-600 mr-1">{req.memberName}</span>}{req.title}</p>
+                                                <p className={`font-black text-xs italic ${req.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>{req.amount > 0 ? '+' : ''}{formatCDollar(Math.abs(req.amount))}</p>
+                                            </div>
+                                            {isAdmin ? (
+                                                <div className="flex gap-2"><button onClick={() => handleRequestApproval(req, false)} className="px-3 py-1.5 bg-slate-100 text-slate-500 rounded-lg text-xs font-black hover:bg-red-50 hover:text-red-500">拒絕</button><button onClick={() => handleRequestApproval(req, true)} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-black shadow-md active:scale-95">批准</button></div>
+                                            ) : <span className="text-[10px] font-black text-orange-500 bg-orange-100 px-2 py-1 rounded">等待父母審核</span>}
                                         </div>
-                                        {isAdmin ? (
-                                            <div className="flex gap-2"><button onClick={() => handleRequestApproval(req, false)} className="px-3 py-1.5 bg-slate-100 text-slate-500 rounded-lg text-xs font-black hover:bg-red-50 hover:text-red-500">拒絕</button><button onClick={() => handleRequestApproval(req, true)} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-black shadow-md active:scale-95">批准</button></div>
-                                        ) : <span className="text-[10px] font-black text-orange-500 bg-orange-100 px-2 py-1 rounded">等待父母審核</span>}
-                                    </div>
-                                )) : <p className="text-xs font-bold text-orange-400 italic">目前沒有待處理的申請</p>}
+                                    ))}
+                                </div>
                             </div>
-                        </div>
-
-                        {/* 交易紀錄 */}
+                        )}
                         <div>
                             <h4 className="font-black text-slate-800 mb-3">資金明細紀錄</h4>
                             <div className="space-y-3">
@@ -427,7 +392,6 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                                         </div>
                                         <div className="flex items-center gap-3">
                                             <p className={`font-black text-lg italic ${tx.amount > 0 ? 'text-green-600':'text-red-600'}`}>{tx.amount > 0 ? '+' : ''}{formatCDollar(Math.abs(tx.amount))}</p>
-                                            {/* 新增歷史紀錄刪除功能 */}
                                             {isAdmin && <button onClick={() => handleAdminDelete('tx', tx.id)} className="text-slate-300 hover:text-red-500 transition-colors p-1"><Trash2 size={16}/></button>}
                                         </div>
                                     </div>
@@ -437,7 +401,6 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                     </div>
                 )}
 
-                {/* 任務大廳 */}
                 {activeSubTab === 'tasks' && (
                     <div className="space-y-3">
                         {isAdmin && <button onClick={() => handleAdminAdd('tasks')} className="w-full bg-indigo-50 text-indigo-600 border border-indigo-100 py-3 rounded-2xl font-black flex justify-center items-center gap-2 mb-4"><Plus size={18}/> 發佈新任務</button>}
@@ -450,7 +413,6 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                     </div>
                 )}
 
-                {/* 兌換商城 */}
                 {activeSubTab === 'shop' && (
                     <div className="space-y-4">
                         {isAdmin && <button onClick={() => handleAdminAdd('shop')} className="w-full bg-indigo-50 text-indigo-600 border border-indigo-100 py-3 rounded-2xl font-black flex justify-center items-center gap-2"><Plus size={18}/> 上架新產品</button>}
@@ -466,7 +428,6 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                     </div>
                 )}
 
-                {/* 投資理財 */}
                 {activeSubTab === 'invest' && (
                     <div className="space-y-4">
                         {isAdmin && <button onClick={() => handleAdminAdd('invest')} className="w-full bg-indigo-50 text-indigo-600 border border-indigo-100 py-3 rounded-2xl font-black flex justify-center items-center gap-2 mb-4"><Plus size={18}/> 發行新金融產品</button>}
@@ -505,7 +466,6 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                     </div>
                 )}
 
-                {/* 央行與存款 */}
                 {activeSubTab === 'bank' && (
                     <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm text-center">
                         <div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4"><Landmark size={40} className="text-indigo-500" /></div>
@@ -555,7 +515,62 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
     );
 };
 
-// --- Modals (Tooltip, Event, Expense, Trip, AddMember, Password, Permissions) ---
+// --- Modals (Form, Settings, etc) ---
+const ExpenseFormModal = ({ isOpen, onClose, onSave, onDelete, initialData, members, expenseCategories }) => {
+    const [formData, setFormData] = useState({ ...initialData, memberId: initialData?.memberId || (members.length > 0 ? members[0].id : '') }); 
+    useEffect(() => { setFormData({ ...initialData, memberId: initialData?.memberId || (members.length > 0 ? members[0].id : '') }); }, [initialData, members]); 
+    if (!isOpen) return null;
+
+    return (
+      <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-end md:items-center justify-center p-4 backdrop-blur-sm">
+        <div className="bg-white rounded-t-[2.5rem] md:rounded-[2.5rem] shadow-2xl w-full max-w-md p-8 animate-in slide-in-from-bottom">
+          <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-black">{formData?.id ? '修改開支' : '新增開支'}</h3><button onClick={onClose} className="p-2 bg-slate-100 rounded-full text-slate-400"><X size={20}/></button></div>
+          <div className="space-y-4">
+            <div>
+                <label className="text-xs font-bold text-slate-400 block mb-2">開支歸屬 (誰的開支？)</label>
+                <div className="flex flex-wrap gap-2">
+                    {members.map(m => (
+                        <button key={m.id} onClick={() => setFormData({...formData, memberId: m.id})} className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ${formData.memberId === m.id ? 'bg-indigo-100 border-indigo-200 text-indigo-700' : 'bg-slate-50 text-slate-400 border-transparent'}`}>{m.avatar} {m.name.split(' ')[0]}</button>
+                    ))}
+                </div>
+            </div>
+            
+            <input className="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="開支內容 (如：大埔管理費)"/>
+            
+            <div className="flex gap-2">
+                <div className="relative flex-1">
+                    <DollarSign size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input type="number" className="w-full bg-slate-50 border-none rounded-2xl py-4 pl-10 pr-4 font-black text-lg text-slate-800" placeholder="金額" value={formData.amount || ''} onChange={e => setFormData({...formData, amount: Number(e.target.value)})} />
+                </div>
+                <input type="date" className="flex-1 bg-slate-50 border-none rounded-2xl p-4 font-bold text-sm" value={formData.date || formatDate(new Date())} onChange={e => setFormData({...formData, date: e.target.value})} />
+            </div>
+
+            <div>
+                <label className="text-xs font-bold text-slate-400 block mb-2">重複週期</label>
+                <div className="grid grid-cols-3 gap-2">
+                    {[{v:'none', l:'單次'}, {v:'daily', l:'每日'}, {v:'weekly', l:'每週'}, {v:'monthly', l:'每月'}, {v:'yearly', l:'每年'}].map(p => (
+                        <button key={p.v} onClick={() => setFormData({...formData, recurringPeriod: p.v})} className={`py-2 rounded-xl text-xs font-bold transition ${formData.recurringPeriod === p.v ? 'bg-indigo-600 text-white shadow-md' : 'bg-slate-50 text-slate-500'}`}>{p.l}</button>
+                    ))}
+                </div>
+            </div>
+
+            <div className="flex gap-2">
+                <select className="flex-1 bg-slate-50 border-none rounded-2xl p-4 font-bold text-sm" value={formData.category || expenseCategories[0]} onChange={e => setFormData({...formData, category: e.target.value})}>
+                    {expenseCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <input className="flex-1 bg-slate-50 border-none rounded-2xl p-4 font-bold text-sm" placeholder="銀行/付款方式" value={formData.bank || ''} onChange={e => setFormData({...formData, bank: e.target.value})}/>
+            </div>
+
+            <div className="flex gap-2 pt-4">
+                {formData?.id && <button onClick={() => onDelete('expenses', formData.id)} className="p-4 text-red-500 bg-red-50 rounded-2xl"><Trash2/></button>}
+                <button onClick={() => onSave(formData)} className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black shadow-lg">確認儲存</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+};
+
 const Tooltip = ({ hoveredEvent, categories }) => {
     if (!hoveredEvent) return null; const { event, x, y } = hoveredEvent; const cat = categories.find(c => c.id === event.type) || categories[0];
     return (<div className="fixed bg-white p-3 rounded-xl shadow-xl border border-gray-100 w-64 pointer-events-none" style={{ top: y + 20, left: Math.min(x, window.innerWidth - 250), zIndex: 100 }}><div className={`text-[10px] font-bold px-2 py-0.5 rounded w-fit mb-1 ${cat.color}`}>{cat.name}</div><div className="font-bold text-gray-800 text-sm">{event.title}</div><div className="text-xs text-gray-500 mt-1 flex items-center gap-1"><Clock size={12}/> {event.startTime} - {event.endTime}</div>{event.notes && <div className="text-xs text-gray-600 mt-2 bg-gray-50 p-2 rounded">{event.notes}</div>}</div>);
@@ -577,24 +592,6 @@ const EventFormModal = ({ isOpen, onClose, onSave, onDelete, initialData, catego
                 </div>
             </div>
         </div>
-    );
-};
-
-const ExpenseFormModal = ({ isOpen, onClose, onSave, onDelete, initialData }) => {
-    const [formData, setFormData] = useState(initialData); useEffect(() => { setFormData(initialData); }, [initialData]); if (!isOpen) return null;
-    return (
-      <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-end md:items-center justify-center p-4 backdrop-blur-sm">
-        <div className="bg-white rounded-t-[2.5rem] md:rounded-[2.5rem] shadow-2xl w-full max-w-md p-8 animate-in slide-in-from-bottom">
-          <div className="flex justify-between items-center mb-6"><h3 className="text-xl font-black">{formData?.id ? '修改開支' : '新增開支'}</h3><button onClick={onClose} className="p-2 bg-slate-100 rounded-full text-slate-400"><X size={20}/></button></div>
-          <div className="space-y-4">
-            <input className="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="項目名稱 (如：大埔管理費)"/>
-            <div className="flex gap-2"><button onClick={() => setFormData({...formData, type: 'recurring_monthly'})} className={`flex-1 py-3 text-xs rounded-xl font-bold ${formData.type === 'recurring_monthly' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-50 text-slate-500'}`}>每月</button><button onClick={() => setFormData({...formData, type: 'recurring_yearly'})} className={`flex-1 py-3 text-xs rounded-xl font-bold ${formData.type === 'recurring_yearly' ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-50 text-slate-500'}`}>每年</button></div>
-            <div className="flex gap-2"><input type="number" className="flex-1 bg-slate-50 border-none rounded-2xl p-4 font-bold" placeholder="金額 HK$" value={formData.amount || ''} onChange={e => setFormData({...formData, amount: Number(e.target.value)})} />{formData.type === 'recurring_yearly' && <input type="number" min="1" max="12" placeholder="月份" className="w-20 bg-slate-50 border-none rounded-2xl p-4 font-bold" value={formData.month || ''} onChange={e => setFormData({...formData, month: Number(e.target.value)})} />}<input type="number" min="1" max="31" placeholder="日" className="w-20 bg-slate-50 border-none rounded-2xl p-4 font-bold" value={formData.day || ''} onChange={e => setFormData({...formData, day: Number(e.target.value)})} /></div>
-            <div className="flex gap-2"><select className="flex-1 bg-slate-50 border-none rounded-2xl p-4 font-bold text-sm" value={formData.category || '日常'} onChange={e => setFormData({...formData, category: e.target.value})}>{['樓宇','信用卡','保險','日常','貸款','其他'].map(c => <option key={c}>{c}</option>)}</select><input className="flex-1 bg-slate-50 border-none rounded-2xl p-4 font-bold text-sm" placeholder="銀行/機構" value={formData.bank || ''} onChange={e => setFormData({...formData, bank: e.target.value})}/></div>
-            <div className="flex gap-2 pt-4">{formData?.id && <button onClick={() => onDelete('expenses', formData.id)} className="p-4 text-red-500 bg-red-50 rounded-2xl"><Trash2/></button>}<button onClick={() => onSave(formData)} className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black shadow-lg">確認儲存</button></div>
-          </div>
-        </div>
-      </div>
     );
 };
 
@@ -645,16 +642,9 @@ const AddMemberModal = ({ isOpen, onClose, onAdd }) => {
     );
 };
 
-// 權限編輯彈窗 (新增)
 const EditPermissionsModal = ({ isOpen, onClose, onSave, member }) => {
     const [permissions, setPermissions] = useState({});
-    useEffect(() => {
-        if (member) {
-            const p = {};
-            ['home', 'calendar', 'expenses', 'travel', 'settings', 'cdollar'].forEach(k => p[k] = member.permissions?.includes(k));
-            setPermissions(p);
-        }
-    }, [member]);
+    useEffect(() => { if (member) { const p = {}; ['home', 'calendar', 'expenses', 'travel', 'settings', 'cdollar'].forEach(k => p[k] = member.permissions?.includes(k)); setPermissions(p); } }, [member]);
     if (!isOpen || !member) return null;
 
     return (
@@ -663,16 +653,10 @@ const EditPermissionsModal = ({ isOpen, onClose, onSave, member }) => {
                 <h3 className="font-black text-xl mb-6">修改權限 - {member.name.split(' ')[0]}</h3>
                 <div className="grid grid-cols-2 gap-3 mb-6">
                     {Object.keys(permissions).map(p => (
-                        <label key={p} className="flex items-center gap-2 text-sm font-bold text-slate-700 cursor-pointer">
-                            <input type="checkbox" className="w-4 h-4 rounded text-indigo-600" checked={permissions[p]} onChange={e => setPermissions({...permissions, [p]: e.target.checked})} />
-                            <span>{p==='home'?'首頁':p==='calendar'?'日曆':p==='expenses'?'開支':p==='travel'?'旅行':p==='cdollar'?'C-Dollar':'設定'}</span>
-                        </label>
+                        <label key={p} className="flex items-center gap-2 text-sm font-bold text-slate-700 cursor-pointer"><input type="checkbox" className="w-4 h-4 rounded text-indigo-600" checked={permissions[p]} onChange={e => setPermissions({...permissions, [p]: e.target.checked})} /><span>{p==='home'?'首頁':p==='calendar'?'日曆':p==='expenses'?'開支':p==='travel'?'旅行':p==='cdollar'?'C-Dollar':'設定'}</span></label>
                     ))}
                 </div>
-                <div className="flex gap-3">
-                    <button onClick={onClose} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black">取消</button>
-                    <button onClick={() => onSave(member.id, Object.keys(permissions).filter(k=>permissions[k]))} className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-lg">儲存</button>
-                </div>
+                <div className="flex gap-3"><button onClick={onClose} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black">取消</button><button onClick={() => onSave(member.id, Object.keys(permissions).filter(k=>permissions[k]))} className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl font-black shadow-lg">儲存</button></div>
             </div>
         </div>
     );
@@ -696,6 +680,7 @@ export default function App() {
   
   const [members, setMembers] = useState([]);
   const [categories] = useState(DEFAULT_CATEGORIES);
+  const [expenseCategories, setExpenseCategories] = useState(DEFAULT_EXPENSE_CATEGORIES);
   const [events, setEvents] = useState([]);
   const [expenses, setExpenses] = useState([]);
   const [trips, setTrips] = useState([]);
@@ -743,18 +728,15 @@ export default function App() {
     const unsubExpenses = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses'), snap => setExpenses(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubTrips = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'trips'), snap => setTrips(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
     const unsubWallets = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'cdollar_wallets'), (snap) => {
-        const d = {}; 
-        snap.docs.forEach(doc => {
-            // 修復：強制使用 doc.id 作為 key，保證雙寶資料絕對對應得上
-            d[doc.id] = { 
-                balance: doc.data().balance || 0, 
-                savings: doc.data().savings || 0, 
-                invested: doc.data().invested || 0 
-            };
-        });
+        const d = {}; snap.docs.forEach(doc => d[doc.id] = { balance: doc.data().balance || 0, savings: doc.data().savings || 0, invested: doc.data().invested || 0 });
         setWallets(d);
     });
-    return () => { unsubMembers(); unsubEvents(); unsubExpenses(); unsubTrips(); unsubWallets(); };
+    // 讀取設定中的自定義開支類型
+    const unsubSettings = onSnapshot(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'expenses'), docSnap => {
+        if (docSnap.exists() && docSnap.data().categories) setExpenseCategories(docSnap.data().categories);
+    });
+
+    return () => { unsubMembers(); unsubEvents(); unsubExpenses(); unsubTrips(); unsubWallets(); unsubSettings(); };
   }, [user]);
 
   const handleLoginSubmit = () => {
@@ -765,16 +747,19 @@ export default function App() {
 
   const handleAddMember = async (newMember) => { await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'members'), { ...newMember, password: '888888', createdAt: serverTimestamp() }); setShowAddMemberModal(false); };
   const handleChangePassword = async (newPassword) => { if (!targetMemberId || !newPassword) return; await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'members', targetMemberId), { password: newPassword }); setShowChangePasswordModal(false); };
-  
-  // 保存權限修改
-  const savePermissions = async (memberId, newPerms) => {
-      await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'members', memberId), { permissions: newPerms });
-      setShowEditPermissionsModal(false);
-  };
+  const savePermissions = async (memberId, newPerms) => { await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'members', memberId), { permissions: newPerms }); setShowEditPermissionsModal(false); };
 
   const saveEvent = async (data) => { const payload = { ...data, updatedAt: serverTimestamp() }; if (data.id) await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'events', data.id), payload); else await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'events'), { ...payload, createdAt: serverTimestamp() }); setShowEventModal(false); };
-  const saveExpense = async (data) => { if (data.id) await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'expenses', data.id), data); else await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses'), { ...data, createdAt: serverTimestamp() }); setShowExpenseModal(false); };
-  const deleteItem = async (col, id) => { if (confirm('確定刪除？')) { await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, col, id)); setShowEventModal(false); setShowExpenseModal(false); } };
+  
+  // 保存開支
+  const saveExpense = async (data) => { 
+      const payload = { ...data, amount: Number(data.amount) || 0, updatedAt: serverTimestamp() };
+      if (data.id) await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'expenses', data.id), payload); 
+      else await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses'), { ...payload, createdAt: serverTimestamp(), paidPeriods: [] }); 
+      setShowExpenseModal(false); 
+  };
+  
+  const deleteItem = async (col, id) => { if (confirm('確定刪除？此動作無法復原。')) { await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, col, id)); setShowEventModal(false); setShowExpenseModal(false); } };
   const finishTripWizard = (data) => {
       const createItem = (name) => ({ name, packed: false });
       const shared = [createItem('Wifi 蛋/SIM卡'), createItem('急救包'), createItem('充電器')];
@@ -783,14 +768,32 @@ export default function App() {
       addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'events'), { title: `✈️ ${data.destination}`, date: data.startDate, startTime: '00:00', endTime: '23:59', type: 'travel', participants: data.participants, notes: `至 ${data.endDate}` });
       setShowTripWizard(false);
   };
-  const handleToggleExpensePaid = async (expenseId) => {
-    const currentMonthKey = `paid_${new Date().getFullYear()}_${new Date().getMonth()}`;
+  
+  // 切換已付狀態
+  const handleToggleExpensePaid = async (expenseId, periodKey) => {
     const expense = expenses.find(e => e.id === expenseId);
-    const paidMonths = expense.paidMonths || [];
-    const newPaidMonths = paidMonths.includes(currentMonthKey) ? paidMonths.filter(m => m !== currentMonthKey) : [...paidMonths, currentMonthKey];
-    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'expenses', expenseId), { paidMonths: newPaidMonths });
+    const paidPeriods = expense.paidPeriods || [];
+    const isPaid = paidPeriods.includes(periodKey);
+    const newPaidPeriods = isPaid ? paidPeriods.filter(m => m !== periodKey) : [...paidPeriods, periodKey];
+    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'expenses', expenseId), { paidPeriods: newPaidPeriods });
   };
 
+  // 開支分類設定
+  const addExpCat = async () => {
+      const newCat = prompt('輸入新的開支類型名稱：');
+      if (newCat && !expenseCategories.includes(newCat)) {
+          const updated = [...expenseCategories, newCat];
+          await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'expenses'), { categories: updated }, { merge: true });
+      }
+  };
+  const deleteExpCat = async (catName) => {
+      if (confirm(`確定刪除分類「${catName}」？`)) {
+          const updated = expenseCategories.filter(c => c !== catName);
+          await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'expenses'), { categories: updated }, { merge: true });
+      }
+  };
+
+  // --- Render Functions ---
   const renderCalendarHeader = () => (
     <div className="flex items-center justify-between p-4 border-b bg-white rounded-t-3xl md:rounded-none">
       <div className="flex items-center gap-4"><h2 className="text-xl font-black text-slate-800">{currentDate.getFullYear()}年 {calendarView !== 'year' && `${currentDate.getMonth()+1}月`}</h2>
@@ -807,13 +810,11 @@ export default function App() {
     const daysInMonth = new Date(year, month + 1, 0).getDate(); const firstDay = new Date(year, month, 1).getDay();
     const days = [];
 
-    // 年視圖 (Year View)
     if (calendarView === 'year') {
       const months = Array.from({length: 12}, (_, i) => i);
       return ( <div className="bg-white md:rounded-3xl shadow-sm h-full flex flex-col overflow-hidden">{renderCalendarHeader()}<div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 overflow-y-auto">{months.map(m => ( <div key={m} className="border border-slate-100 rounded-2xl p-4 hover:shadow-md cursor-pointer bg-white transition-all active:scale-95" onClick={() => { setCurrentDate(new Date(year, m, 1)); setCalendarView('month'); }}><div className="text-center font-black mb-3 text-indigo-600 bg-indigo-50 rounded-xl py-2">{m+1}月</div><div className="grid grid-cols-7 gap-1 text-[8px] text-center font-bold text-slate-400">{['日','一','二','三','四','五','六'].map(d => <div key={d} className={d==='日'||d==='六'?'text-red-400':''}>{d}</div>)}{Array.from({length: new Date(year, m, 1).getDay()}).map((_, i) => <div key={`e-${i}`}></div>)}{Array.from({length: new Date(year, m+1, 0).getDate()}).map((_, i) => { const isHol = HK_HOLIDAYS[formatDate(new Date(year, m, i+1))]; return <div key={i} className={`rounded-full aspect-square flex items-center justify-center ${isHol ? 'bg-red-100 text-red-600' : 'bg-slate-50'}`}>{i+1}</div>; })}</div></div>))}</div></div>);
     }
     
-    // 日視圖 (Day View / Mobile View)
     if (calendarView === 'day' || window.innerWidth < 768) {
       const miniDays = [];
       for (let i = 0; i < firstDay; i++) miniDays.push(<div key={`empty-${i}`} className="h-12"></div>);
@@ -857,20 +858,11 @@ export default function App() {
                          const isPast = new Date(`${ev.date}T${ev.endTime||'23:59'}`) < new Date();
                          return (
                            <div key={ev.id} onClick={() => { setEventFormData(ev); setShowEventModal(true); }} className={`flex gap-4 p-5 rounded-[2rem] border transition-transform active:scale-[0.98] cursor-pointer ${isPast ? 'opacity-50 bg-slate-50 border-slate-100' : 'bg-white shadow-sm border-slate-100'}`}>
-                              <div className="flex flex-col items-center justify-center w-16 border-r pr-4 border-slate-100">
-                                  <span className="text-sm font-black text-slate-800">{ev.startTime}</span>
-                                  {ev.endTime && <><div className="h-4 w-[2px] bg-slate-100 my-1"></div><span className="text-xs font-bold text-slate-400">{ev.endTime}</span></>}
-                              </div>
+                              <div className="flex flex-col items-center justify-center w-16 border-r pr-4 border-slate-100"><span className="text-sm font-black text-slate-800">{ev.startTime}</span>{ev.endTime && <><div className="h-4 w-[2px] bg-slate-100 my-1"></div><span className="text-xs font-bold text-slate-400">{ev.endTime}</span></>}</div>
                               <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 mb-1">
                                       <span className={`w-3 h-3 rounded-full shrink-0 ${cat.color.replace('text', 'bg').split(' ')[0]}`}></span>
-                                      {/* 【修改點 1】：將參與者頭像移至標題前方 */}
-                                      <div className="flex items-center -space-x-1.5 shrink-0">
-                                          {ev.participants?.map(p => { 
-                                              const mem = members.find(m=>m.id===p); 
-                                              return mem ? <div key={p} className="w-5 h-5 rounded-full overflow-hidden bg-slate-100 border-2 border-white text-[10px] flex items-center justify-center shadow-sm relative z-10" title={mem.name}>{mem.avatar}</div> : null 
-                                          })}
-                                      </div>
+                                      <div className="flex items-center -space-x-1.5 shrink-0">{ev.participants?.map(p => { const mem = members.find(m=>m.id===p); return mem ? <div key={p} className="w-5 h-5 rounded-full overflow-hidden bg-slate-100 border-2 border-white text-[10px] flex items-center justify-center shadow-sm relative z-10" title={mem.name}>{mem.avatar}</div> : null })}</div>
                                       <span className="font-black text-lg text-slate-800 truncate">{ev.title}</span>
                                   </div>
                                   {ev.notes && <div className="text-xs font-bold text-slate-400 truncate mb-1">{ev.notes}</div>}
@@ -886,7 +878,6 @@ export default function App() {
       );
     }
 
-    // 月視圖 (Desktop Month View)
     for (let i = 0; i < firstDay; i++) days.push(<div key={`empty-${i}`} className="h-28 bg-slate-50/50 border-r border-b"></div>);
     for (let d = 1; d <= daysInMonth; d++) {
       const dateObj = new Date(year, month, d); const dateStr = formatDate(dateObj); const isToday = formatDate(new Date()) === dateStr;
@@ -894,31 +885,8 @@ export default function App() {
       const dayEvents = events.filter(e => e.date === dateStr);
       days.push(
         <div key={d} onClick={() => { setCurrentDate(dateObj); setCalendarView('day'); }} className={`h-28 border-r border-b p-1.5 relative hover:bg-indigo-50/50 transition-colors cursor-pointer ${isToday ? 'bg-indigo-50/30' : 'bg-white'}`}>
-           <div className="flex justify-between items-start">
-               <span className={`text-sm font-black w-6 h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-700'}`}>{d}</span>
-               <div className="flex flex-col items-end">
-                   <span className="text-[9px] font-bold text-slate-400">{lunar.dayText}</span>
-                   {lunar.auspicious && <span className="text-[8px] font-bold text-orange-500 scale-90 origin-right border border-orange-200 rounded px-1 bg-orange-50 mt-0.5 whitespace-nowrap">{lunar.auspicious}</span>}
-                   {holiday && <span className="text-[9px] font-black text-red-500 mt-0.5">{holiday}</span>}
-               </div>
-           </div>
-           <div className="mt-1 flex flex-col gap-1 overflow-hidden h-[calc(100%-28px)]">
-             {dayEvents.slice(0, 3).map(ev => { 
-                 const cat = categories.find(c => c.id === ev.type) || categories[0]; 
-                 return (
-                    <div key={ev.id} onMouseEnter={(e) => setHoveredEvent({ event: ev, x: e.clientX, y: e.clientY })} onMouseLeave={() => setHoveredEvent(null)} onClick={(e) => { e.stopPropagation(); setEventFormData(ev); setShowEventModal(true); }} className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md truncate border flex items-center gap-1 ${cat.color}`}>
-                        {/* 【修改點 2】：在桌面月曆視圖的小格子裡，也將頭像放在標題前面 */}
-                        <div className="flex -space-x-1 shrink-0">
-                            {ev.participants?.slice(0,3).map(p => {
-                                const mem = members.find(m=>m.id===p);
-                                return mem ? <span key={p} className="text-[8px] drop-shadow-sm">{mem.avatar}</span> : null;
-                            })}
-                        </div>
-                        <span className="truncate">{ev.title}</span>
-                    </div>
-                 ); 
-             })}
-           </div>
+           <div className="flex justify-between items-start"><span className={`text-sm font-black w-6 h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-700'}`}>{d}</span><div className="flex flex-col items-end"><span className="text-[9px] font-bold text-slate-400">{lunar.dayText}</span>{lunar.auspicious && <span className="text-[8px] font-bold text-orange-500 scale-90 origin-right border border-orange-200 rounded px-1 bg-orange-50 mt-0.5 whitespace-nowrap">{lunar.auspicious}</span>}{holiday && <span className="text-[9px] font-black text-red-500 mt-0.5">{holiday}</span>}</div></div>
+           <div className="mt-1 flex flex-col gap-1 overflow-hidden h-[calc(100%-28px)]">{dayEvents.slice(0, 3).map(ev => { const cat = categories.find(c => c.id === ev.type) || categories[0]; return (<div key={ev.id} onMouseEnter={(e) => setHoveredEvent({ event: ev, x: e.clientX, y: e.clientY })} onMouseLeave={() => setHoveredEvent(null)} onClick={(e) => { e.stopPropagation(); setEventFormData(ev); setShowEventModal(true); }} className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md truncate border flex items-center gap-1 ${cat.color}`}><div className="flex -space-x-1 shrink-0">{ev.participants?.slice(0,3).map(p => {const mem = members.find(m=>m.id===p); return mem ? <span key={p} className="text-[8px] drop-shadow-sm z-10 relative">{mem.avatar}</span> : null;})}</div><span className="truncate">{ev.title}</span></div>); })}</div>
         </div>
       );
     }
@@ -926,36 +894,70 @@ export default function App() {
   };
 
   const renderExpenses = () => {
-     const currentMonthKey = `paid_${new Date().getFullYear()}_${new Date().getMonth()}`;
-     const monthlyExpenses = expenses.filter(e => e.type === 'recurring_monthly' || (e.type === 'recurring_yearly' && e.month === new Date().getMonth() + 1));
-     const totalBudget = monthlyExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
-     const paidAmount = monthlyExpenses.reduce((sum, e) => sum + ((e.paidMonths || []).includes(currentMonthKey) ? (e.amount || 0) : 0), 0);
+     const currentYear = currentDate.getFullYear();
+     const currentMonth = currentDate.getMonth(); // 0-11
+     
+     // 動態計算當月開支
+     const displayExpenses = expenses.map(e => {
+        let periodKey = ''; let amountMultiplier = 1; let isApplicable = false;
+        const eDate = new Date(e.date || new Date().toISOString());
+        
+        switch (e.recurringPeriod) {
+            case 'daily':
+                isApplicable = true; amountMultiplier = 30; periodKey = `paid_${currentYear}_${currentMonth}_daily`; break;
+            case 'weekly':
+                isApplicable = true; amountMultiplier = 4; periodKey = `paid_${currentYear}_${currentMonth}_weekly`; break;
+            case 'monthly':
+                isApplicable = true; periodKey = `paid_${currentYear}_${currentMonth}_monthly`; break;
+            case 'yearly':
+                isApplicable = eDate.getMonth() === currentMonth; periodKey = `paid_${currentYear}_${currentMonth}_yearly`; break;
+            default: // none
+                isApplicable = eDate.getFullYear() === currentYear && eDate.getMonth() === currentMonth; periodKey = `paid_${e.id}_oneoff`; break;
+        }
+        
+        return { ...e, calculatedAmount: (e.amount || 0) * amountMultiplier, periodKey, isApplicable, displayDate: eDate.getDate() };
+     }).filter(e => e.isApplicable).sort((a,b) => a.displayDate - b.displayDate);
+
+     const totalBudget = displayExpenses.reduce((sum, e) => sum + e.calculatedAmount, 0);
+     const paidAmount = displayExpenses.reduce((sum, e) => sum + ((e.paidPeriods || []).includes(e.periodKey) ? e.calculatedAmount : 0), 0);
      const unpaidAmount = totalBudget - paidAmount;
      
      return (
         <div className="h-full overflow-y-auto pb-10">
-           <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-black text-slate-800">家庭開支</h2><button onClick={() => {setExpenseFormData({type: 'recurring_monthly', category: '日常', day: 1}); setShowExpenseModal(true);}} className="bg-indigo-600 text-white p-3 rounded-2xl shadow-lg shadow-indigo-200 active:scale-95"><Plus size={20}/></button></div>
+           <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-black text-slate-800">家庭開支</h2><button onClick={() => {setExpenseFormData({recurringPeriod: 'monthly', category: expenseCategories[0], date: formatDate(new Date())}); setShowExpenseModal(true);}} className="bg-indigo-600 text-white p-3 rounded-2xl shadow-lg shadow-indigo-200 active:scale-95"><Plus size={20}/></button></div>
+           
            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-              <div className="bg-indigo-50 rounded-[2rem] p-6 shadow-sm"><span className="text-xs text-indigo-500 font-black uppercase mb-1 flex items-center gap-1"><PieChart size={14}/> 本月總預算</span><span className="text-3xl font-black text-indigo-900">{formatMoney(totalBudget)}</span></div>
+              <div className="bg-indigo-50 rounded-[2rem] p-6 shadow-sm"><span className="text-xs text-indigo-500 font-black uppercase mb-1 flex items-center gap-1"><PieChart size={14}/> 當月預估總計</span><span className="text-3xl font-black text-indigo-900">{formatMoney(totalBudget)}</span></div>
               <div className="bg-green-50 rounded-[2rem] p-6 shadow-sm"><span className="text-xs text-green-500 font-black uppercase mb-1 flex items-center gap-1"><CheckSquare size={14}/> 已付</span><span className="text-3xl font-black text-green-700">{formatMoney(paidAmount)}</span></div>
               <div className="bg-red-50 rounded-[2rem] p-6 shadow-sm"><span className="text-xs text-red-500 font-black uppercase mb-1 flex items-center gap-1"><Wallet size={14}/> 待付</span><span className="text-3xl font-black text-red-600">{formatMoney(unpaidAmount)}</span></div>
            </div>
+
            <div className="bg-white rounded-[2rem] shadow-sm overflow-hidden border border-slate-100">
-               {monthlyExpenses.map((item, idx) => {
-                   const isPaid = (item.paidMonths || []).includes(currentMonthKey);
+               {displayExpenses.length > 0 ? displayExpenses.map((item, idx) => {
+                   const isPaid = (item.paidPeriods || []).includes(item.periodKey);
+                   const member = members.find(m => m.id === item.memberId) || members[0];
                    return (
                        <div key={item.id} className={`flex items-center justify-between p-5 transition-colors ${idx !== 0 ? 'border-t border-slate-50' : ''} ${isPaid ? 'bg-slate-50/50' : 'bg-white'}`}>
                            <div className="flex items-center gap-4">
-                               <button onClick={() => handleToggleExpensePaid(item.id)} className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${isPaid ? 'bg-green-500 text-white shadow-md' : 'bg-slate-100 text-slate-300 hover:bg-slate-200'}`}>{isPaid && <Check size={16} strokeWidth={3}/>}</button>
+                               <button onClick={() => handleToggleExpensePaid(item.id, item.periodKey)} className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all shrink-0 ${isPaid ? 'bg-green-500 text-white shadow-md' : 'bg-slate-100 text-slate-300 hover:bg-slate-200'}`}>{isPaid && <Check size={16} strokeWidth={3}/>}</button>
                                <div onClick={() => {setExpenseFormData(item); setShowExpenseModal(true);}} className="cursor-pointer">
-                                   <div className={`font-black text-lg ${isPaid ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{item.name}</div>
-                                   <div className="text-xs font-bold text-slate-400 flex items-center gap-2"><span>每月 {item.day} 號</span><span className="bg-slate-100 px-2 py-0.5 rounded-full">{item.category}</span></div>
+                                   <div className="flex items-center gap-2 mb-0.5">
+                                       <span className="text-sm bg-white border border-slate-200 rounded-full w-5 h-5 flex items-center justify-center shadow-sm" title={member?.name}>{member?.avatar}</span>
+                                       <span className={`font-black text-lg ${isPaid ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{item.name}</span>
+                                   </div>
+                                   <div className="text-xs font-bold text-slate-400 flex items-center gap-2">
+                                       <span className="flex items-center gap-1"><Repeat size={10}/> {item.recurringPeriod==='monthly'?'每月':item.recurringPeriod==='yearly'?'每年':item.recurringPeriod==='weekly'?'每週':item.recurringPeriod==='daily'?'每日':'單次'} {item.recurringPeriod==='monthly'||item.recurringPeriod==='yearly' ? `${item.displayDate}號` : ''}</span>
+                                       <span className="flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-full text-slate-500"><Tag size={10}/> {item.category}</span>
+                                   </div>
                                </div>
                            </div>
-                           <div className={`font-black text-xl italic ${isPaid ? 'text-slate-300' : 'text-slate-800'}`}>{formatMoney(item.amount)}</div>
+                           <div className="text-right">
+                               <div className={`font-black text-xl italic ${isPaid ? 'text-slate-300' : 'text-slate-800'}`}>{formatMoney(item.calculatedAmount)}</div>
+                               {item.calculatedAmount !== item.amount && <div className="text-[9px] font-bold text-slate-400">(${item.amount}/期)</div>}
+                           </div>
                        </div>
                    )
-               })}
+               }) : <div className="text-center text-slate-400 font-bold py-10 italic">當月沒有任何開支紀錄</div>}
            </div>
         </div>
      );
@@ -994,12 +996,12 @@ export default function App() {
           {currentUserRole.role === 'admin' && (
               <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-50">
                   <div className="flex justify-between items-center mb-6">
-                      <h3 className="font-black text-lg">家庭成員管理</h3>
+                      <h3 className="font-black text-lg">家庭成員與權限管理</h3>
                       <button onClick={() => setShowAddMemberModal(true)} className="text-xs bg-indigo-600 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-1 shadow-md active:scale-95"><Plus size={14}/> 新增成員</button>
                   </div>
                   <div className="space-y-3">
                       {members.map(m => (
-                          <div key={m.id} className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-slate-50 rounded-2xl gap-4">
+                          <div key={m.id} className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-slate-50 rounded-2xl gap-4 border border-slate-100">
                               <div className="flex items-center gap-4">
                                   <div className="text-3xl bg-white w-12 h-12 rounded-xl flex items-center justify-center shadow-sm shrink-0">{m.avatar}</div>
                                   <div>
@@ -1017,6 +1019,18 @@ export default function App() {
                               </div>
                           </div>
                       ))}
+                  </div>
+
+                  <div className="mt-8 pt-8 border-t border-slate-100">
+                      <h3 className="font-black text-lg mb-4 flex items-center gap-2"><Tag size={18} className="text-indigo-500"/> 開支類型設定</h3>
+                      <div className="flex flex-wrap gap-2">
+                          {expenseCategories.map(c => (
+                              <span key={c} className="px-3 py-1.5 bg-slate-100 rounded-full text-xs font-bold text-slate-600 flex items-center gap-1 shadow-sm">
+                                  {c} <button onClick={()=>deleteExpCat(c)} className="text-slate-400 hover:text-red-500 ml-1"><X size={12}/></button>
+                              </span>
+                          ))}
+                          <button onClick={addExpCat} className="px-4 py-1.5 bg-indigo-50 text-indigo-600 rounded-full text-xs font-black flex items-center gap-1 hover:bg-indigo-100 transition"><Plus size={12}/> 新增類型</button>
+                      </div>
                   </div>
               </div>
           )}
@@ -1098,9 +1112,9 @@ export default function App() {
         </nav>
       </main>
 
-      <Tooltip hoveredEvent={hoveredEvent} categories={categories} members={members} />
+      <Tooltip hoveredEvent={hoveredEvent} categories={categories} />
       <EventFormModal isOpen={showEventModal} onClose={() => setShowEventModal(false)} onSave={saveEvent} onDelete={deleteItem} initialData={eventFormData} categories={categories} members={members} />
-      <ExpenseFormModal isOpen={showExpenseModal} onClose={() => setShowExpenseModal(false)} onSave={saveExpense} onDelete={deleteItem} initialData={expenseFormData} />
+      <ExpenseFormModal isOpen={showExpenseModal} onClose={() => setShowExpenseModal(false)} onSave={saveExpense} onDelete={deleteItem} initialData={expenseFormData} members={members} expenseCategories={expenseCategories} />
       <TripWizard isOpen={showTripWizard} onClose={() => setShowTripWizard(false)} onFinish={finishTripWizard} members={members} />
       <AddMemberModal isOpen={showAddMemberModal} onClose={() => setShowAddMemberModal(false)} onAdd={handleAddMember} />
       <ChangePasswordModal isOpen={showChangePasswordModal} onClose={() => setShowChangePasswordModal(false)} onConfirm={handleChangePassword} />
