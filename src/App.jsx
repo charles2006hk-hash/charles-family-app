@@ -27,7 +27,7 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = 'charles-family-app';
 
-// 🚀 核心修復：使用全域固定的家庭資料庫路徑，不再依賴會變動的匿名 UID
+// 🚀 使用全域固定的家庭資料庫路徑，確保全家資料同步
 const getCol = (colName) => collection(db, 'artifacts', appId, 'family', 'main', colName);
 const getDoc = (colName, id) => doc(db, 'artifacts', appId, 'family', 'main', colName, id);
 
@@ -59,6 +59,25 @@ const HK_HOLIDAYS = {
 };
 
 const LUNAR_DATA = [{ day: 1, text: '初一', ausp: '宜祭祀 祈福' }, { day: 15, text: '十五', ausp: '宜祭祀' }, { day: 2, text: '初二', ausp: '宜出行' }, { day: 8, text: '初八', ausp: '諸事不宜' }, { day: 16, text: '十六', ausp: '宜開市' }, { day: 23, text: '廿三', ausp: '宜大掃除' }];
+
+// 🚀 完整還原你最初的 15 筆開支紀錄
+const INITIAL_EXPENSES = [
+  { name: '大埔帝欣苑 (供款)', amount: 19038, day: 15, category: '樓宇', bank: 'DBS', type: 'recurring_monthly', recurringPeriod: 'monthly' },
+  { name: '大埔帝欣苑 (管理費)', amount: 2500, day: 15, category: '樓宇', bank: 'DBS', type: 'recurring_monthly', recurringPeriod: 'monthly' },
+  { name: '九龍農圃道 (供款)', amount: 26207, day: 15, category: '樓宇', bank: 'DBS', type: 'recurring_monthly', recurringPeriod: 'monthly' },
+  { name: '九龍農圃道 (管理費)', amount: 4200, day: 15, category: '樓宇', bank: 'DBS', type: 'recurring_monthly', recurringPeriod: 'monthly' },
+  { name: '大埔太湖花園7座 (供款)', amount: 13923, day: 15, category: '樓宇', bank: 'DBS', type: 'recurring_monthly', recurringPeriod: 'monthly' },
+  { name: '大埔太湖花園5座 (供款)', amount: 12668, day: 15, category: '樓宇', bank: '大新', type: 'recurring_monthly', recurringPeriod: 'monthly' },
+  { name: '科學園嘉熙 (供款)', amount: 10891, day: 15, category: '樓宇', bank: '大新', type: 'recurring_monthly', recurringPeriod: 'monthly' },
+  { name: '譚公道 (供款)', amount: 10891, day: 15, category: '樓宇', bank: '恆生', type: 'recurring_monthly', recurringPeriod: 'monthly' },
+  { name: '私人貸款 (Autopay)', amount: 13995, day: 15, category: '貸款', bank: '大新', type: 'recurring_monthly', recurringPeriod: 'monthly' },
+  { name: 'Citibank Club Master', amount: 0, day: 21, category: '信用卡', bank: 'Citibank', type: 'recurring_monthly', recurringPeriod: 'monthly' },
+  { name: 'DBS Visa (Target)', amount: 50000, day: 10, category: '信用卡', bank: 'DBS', type: 'recurring_monthly', recurringPeriod: 'monthly' },
+  { name: 'AXA 醫療 (Jason)', amount: 2384.83, month: 2, day: 21, category: '保險', type: 'recurring_yearly', recurringPeriod: 'yearly' },
+  { name: 'AXA 人壽 (Charles)', amount: 106739.68, month: 10, day: 22, category: '保險', type: 'recurring_yearly', recurringPeriod: 'yearly' },
+  { name: '農圃車位租金', amount: 3600, day: 1, category: '日常', bank: 'HSBC', type: 'recurring_monthly', recurringPeriod: 'monthly' },
+  { name: '農圃水費', amount: 1000, day: 1, category: '日常', type: 'recurring_monthly', recurringPeriod: 'monthly' }
+];
 
 const SEED_SHOP_ITEMS = [
     { title: '遊戲時間 1 小時', cost: 50, icon: '🎮' }, { title: '免做一次家務', cost: 100, icon: '🧹' },
@@ -177,7 +196,10 @@ const DashboardView = ({ currentUser, members, wallets, events, trips, expenses,
                 <div className="space-y-3">
                     {upcomingEvents.length > 0 ? upcomingEvents.map(ev => (
                         <div key={ev.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-                            <div className="w-14 h-14 bg-indigo-50 rounded-xl flex flex-col items-center justify-center text-indigo-600 shrink-0"><span className="text-[10px] font-bold uppercase tracking-widest">{ev.date.split('-')[1]}月</span><span className="text-xl font-black">{ev.date.split('-')[2]}</span></div>
+                            <div className="w-14 h-14 bg-indigo-50 rounded-xl flex flex-col items-center justify-center text-indigo-600 shrink-0">
+                                <span className="text-[10px] font-bold uppercase tracking-widest">{ev.date.split('-')[1]}月</span>
+                                <span className="text-xl font-black">{ev.date.split('-')[2]}</span>
+                            </div>
                             <div className="flex-1 min-w-0">
                                 <p className="font-black text-slate-800 text-lg truncate">{ev.title}</p>
                                 <p className="text-xs font-bold text-slate-400 flex items-center gap-1"><Clock size={12}/> {ev.startTime} {ev.notes ? `· ${ev.notes}` : ''}</p>
@@ -187,10 +209,27 @@ const DashboardView = ({ currentUser, members, wallets, events, trips, expenses,
                     )) : <div className="text-center text-slate-400 font-bold py-8 bg-white rounded-2xl border border-slate-100 italic">近期沒有與您相關的安排</div>}
                 </div>
             </div>
+
+            {(currentUser.permissions || []).includes('travel') && activeTrips.length > 0 && (
+                <div>
+                    <h3 className="font-black text-lg text-slate-800 mb-3 px-2 flex items-center gap-2"><Plane size={18} className="text-indigo-500"/> 即將出發旅行</h3>
+                    {activeTrips.map(trip => (
+                        <div key={trip.id} onClick={() => setActiveTab('travel')} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 cursor-pointer hover:border-indigo-200 transition">
+                            <div className="flex items-center gap-3 mb-2"><MapPin size={22} className="text-indigo-500" /><h4 className="font-black text-xl text-slate-800 truncate">{trip.destination}</h4></div>
+                            <p className="text-sm font-bold text-slate-400 mb-4 ml-8">{trip.startDate} - {trip.endDate}</p>
+                            <div className="flex items-center gap-3">
+                                <div className="flex-1 bg-slate-100 rounded-full h-3"><div className="bg-green-500 h-3 rounded-full transition-all duration-500" style={{width:`${calculatePackingProgress(trip.packingList)}%`}}></div></div>
+                                <span className="text-xs font-black text-green-600 bg-green-50 px-2 py-1 rounded-md">行李 {calculatePackingProgress(trip.packingList)}%</span>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 };
 
+// C-Dollar 視圖
 const CDollarView = ({ currentUser, members, wallets, db }) => {
     const [transactions, setTransactions] = useState([]);
     const [requests, setRequests] = useState([]);
@@ -325,7 +364,10 @@ const CDollarView = ({ currentUser, members, wallets, db }) => {
             <div className="p-4 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-b-[2rem] shadow-lg text-white mb-4 relative overflow-hidden shrink-0">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full -mr-10 -mt-10 blur-xl"></div>
                 <div className="flex justify-between items-center mb-6 pt-2">
-                    <div><h2 className="text-2xl font-black italic">Family FQ Center</h2><p className="text-[10px] font-bold opacity-80 flex items-center gap-1 mt-1"><RefreshCw size={10}/> 實時掛鉤 CNY 匯率: 1 C$ = {EXCHANGE_RATE_CNY_HKD} HKD</p></div>
+                    <div>
+                        <h2 className="text-2xl font-black italic">Family FQ Center</h2>
+                        <p className="text-[10px] font-bold opacity-80 flex items-center gap-1 mt-1"><RefreshCw size={10}/> 實時掛鉤 CNY 匯率: 1 C$ = {EXCHANGE_RATE_CNY_HKD} HKD</p>
+                    </div>
                     <Award size={28} className="text-yellow-300 drop-shadow-md" />
                 </div>
                 
@@ -728,43 +770,23 @@ export default function App() {
 
   useEffect(() => {
     if (!user) return;
-    
-    // 1. 讀取與初始化成員
     const unsubMembers = onSnapshot(getCol('members'), (snap) => {
         const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        if (data.length === 0) {
-            DEFAULT_MEMBERS_SEED.forEach(m => addDoc(getCol('members'), { ...m, createdAt: serverTimestamp() }));
-        } else {
-            setMembers(data);
-        }
+        if (data.length === 0) DEFAULT_MEMBERS_SEED.forEach(m => addDoc(getCol('members'), { ...m, createdAt: serverTimestamp() }));
+        else setMembers(data);
         setLoading(false);
     });
-
-    // 2. 讀取日程
     const unsubEvents = onSnapshot(getCol('events'), snap => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-
-    // 3. 🚀 讀取與初始化開支 (修復點：把預設開支寫入資料庫的邏輯加回來)
     const unsubExpenses = onSnapshot(getCol('expenses'), snap => {
         const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        if (data.length === 0) {
-            // 如果資料庫是空的，就把 INITIAL_EXPENSES 寫進去
-            INITIAL_EXPENSES.forEach(e => addDoc(getCol('expenses'), { ...e, createdAt: serverTimestamp(), paidPeriods: [] }));
-        } else {
-            setExpenses(data);
-        }
+        if (data.length === 0) INITIAL_EXPENSES.forEach(e => addDoc(getCol('expenses'), { ...e, createdAt: serverTimestamp(), paidPeriods: [] }));
+        else setExpenses(data);
     });
-
-    // 4. 讀取旅行
     const unsubTrips = onSnapshot(getCol('trips'), snap => setTrips(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-
-    // 5. 讀取 C-Dollar 錢包
     const unsubWallets = onSnapshot(getCol('cdollar_wallets'), (snap) => {
-        const d = {}; 
-        snap.docs.forEach(doc => d[doc.id] = { balance: doc.data().balance || 0, savings: doc.data().savings || 0, invested: doc.data().invested || 0 });
+        const d = {}; snap.docs.forEach(doc => d[doc.id] = { balance: doc.data().balance || 0, savings: doc.data().savings || 0, invested: doc.data().invested || 0 });
         setWallets(d);
     });
-
-    // 6. 讀取設定
     const unsubSettings = onSnapshot(getDoc('settings', 'expenses'), docSnap => {
         if (docSnap.exists() && docSnap.data().categories) setExpenseCategories(docSnap.data().categories);
     });
@@ -778,7 +800,6 @@ export default function App() {
       } else alert('密碼錯誤！');
   };
 
-  // Avatar Upload Logic in Settings
   const handleUpdateAvatar = async (e) => {
       const file = e.target.files[0];
       if (file) {
@@ -786,7 +807,7 @@ export default function App() {
           const reader = new FileReader();
           reader.onloadend = async () => {
               await updateDoc(getDoc('members', currentUserRole.id), { avatar: reader.result });
-              setCurrentUserRole(prev => ({ ...prev, avatar: reader.result })); // Optimistic UI update
+              setCurrentUserRole(prev => ({ ...prev, avatar: reader.result })); 
           };
           reader.readAsDataURL(file);
       }
@@ -836,7 +857,6 @@ export default function App() {
       }
   };
 
-  // --- Render Functions ---
   const renderCalendarHeader = () => (
     <div className="flex items-center justify-between p-4 border-b bg-white rounded-t-3xl md:rounded-none">
       <div className="flex items-center gap-4"><h2 className="text-xl font-black text-slate-800">{currentDate.getFullYear()}年 {calendarView !== 'year' && `${currentDate.getMonth()+1}月`}</h2>
@@ -901,19 +921,11 @@ export default function App() {
                          const isPast = new Date(`${ev.date}T${ev.endTime||'23:59'}`) < new Date();
                          return (
                            <div key={ev.id} onClick={() => { setEventFormData(ev); setShowEventModal(true); }} className={`flex gap-4 p-5 rounded-[2rem] border transition-transform active:scale-[0.98] cursor-pointer ${isPast ? 'opacity-50 bg-slate-50 border-slate-100' : 'bg-white shadow-sm border-slate-100'}`}>
-                              <div className="flex flex-col items-center justify-center w-16 border-r pr-4 border-slate-100">
-                                  <span className="text-sm font-black text-slate-800">{ev.startTime}</span>
-                                  {ev.endTime && <><div className="h-4 w-[2px] bg-slate-100 my-1"></div><span className="text-xs font-bold text-slate-400">{ev.endTime}</span></>}
-                              </div>
+                              <div className="flex flex-col items-center justify-center w-16 border-r pr-4 border-slate-100"><span className="text-sm font-black text-slate-800">{ev.startTime}</span>{ev.endTime && <><div className="h-4 w-[2px] bg-slate-100 my-1"></div><span className="text-xs font-bold text-slate-400">{ev.endTime}</span></>}</div>
                               <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 mb-1">
                                       <span className={`w-3 h-3 rounded-full shrink-0 ${cat.color.replace('text', 'bg').split(' ')[0]}`}></span>
-                                      <div className="flex items-center -space-x-1.5 shrink-0">
-                                          {ev.participants?.map(p => { 
-                                              const mem = members.find(m=>m.id===p); 
-                                              return mem ? <div key={p} className="w-5 h-5 rounded-full overflow-hidden bg-slate-100 border border-slate-200 text-[10px] flex items-center justify-center shadow-sm relative z-10" title={mem.name}>{renderAvatar(mem.avatar)}</div> : null 
-                                          })}
-                                      </div>
+                                      <div className="flex items-center -space-x-1.5 shrink-0">{ev.participants?.map(p => { const mem = members.find(m=>m.id===p); return mem ? <div key={p} className="w-5 h-5 rounded-full overflow-hidden bg-slate-100 border border-slate-200 text-[10px] flex items-center justify-center shadow-sm relative z-10" title={mem.name}>{renderAvatar(mem.avatar)}</div> : null })}</div>
                                       <span className="font-black text-lg text-slate-800 truncate">{ev.title}</span>
                                   </div>
                                   {ev.notes && <div className="text-xs font-bold text-slate-400 truncate mb-1">{ev.notes}</div>}
