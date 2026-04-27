@@ -728,19 +728,43 @@ export default function App() {
 
   useEffect(() => {
     if (!user) return;
+    
+    // 1. 讀取與初始化成員
     const unsubMembers = onSnapshot(getCol('members'), (snap) => {
         const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        if (data.length === 0) DEFAULT_MEMBERS_SEED.forEach(m => addDoc(getCol('members'), { ...m, createdAt: serverTimestamp() }));
-        else setMembers(data);
+        if (data.length === 0) {
+            DEFAULT_MEMBERS_SEED.forEach(m => addDoc(getCol('members'), { ...m, createdAt: serverTimestamp() }));
+        } else {
+            setMembers(data);
+        }
         setLoading(false);
     });
+
+    // 2. 讀取日程
     const unsubEvents = onSnapshot(getCol('events'), snap => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const unsubExpenses = onSnapshot(getCol('expenses'), snap => setExpenses(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+
+    // 3. 🚀 讀取與初始化開支 (修復點：把預設開支寫入資料庫的邏輯加回來)
+    const unsubExpenses = onSnapshot(getCol('expenses'), snap => {
+        const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        if (data.length === 0) {
+            // 如果資料庫是空的，就把 INITIAL_EXPENSES 寫進去
+            INITIAL_EXPENSES.forEach(e => addDoc(getCol('expenses'), { ...e, createdAt: serverTimestamp(), paidPeriods: [] }));
+        } else {
+            setExpenses(data);
+        }
+    });
+
+    // 4. 讀取旅行
     const unsubTrips = onSnapshot(getCol('trips'), snap => setTrips(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+
+    // 5. 讀取 C-Dollar 錢包
     const unsubWallets = onSnapshot(getCol('cdollar_wallets'), (snap) => {
-        const d = {}; snap.docs.forEach(doc => d[doc.id] = { balance: doc.data().balance || 0, savings: doc.data().savings || 0, invested: doc.data().invested || 0 });
+        const d = {}; 
+        snap.docs.forEach(doc => d[doc.id] = { balance: doc.data().balance || 0, savings: doc.data().savings || 0, invested: doc.data().invested || 0 });
         setWallets(d);
     });
+
+    // 6. 讀取設定
     const unsubSettings = onSnapshot(getDoc('settings', 'expenses'), docSnap => {
         if (docSnap.exists() && docSnap.data().categories) setExpenseCategories(docSnap.data().categories);
     });
