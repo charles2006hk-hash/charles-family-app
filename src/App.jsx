@@ -45,7 +45,8 @@ const DEFAULT_CATEGORIES = [
   { id: 'competition', name: '外出比賽', color: 'bg-purple-100 text-purple-800 border-purple-200', type: 'custom' },
 ];
 
-const DEFAULT_EXPENSE_CATEGORIES = ['樓宇', '信用卡', '保險', '日常', '貸款', '教育', '娛樂', '其他'];
+// 擴充預設的開支分類
+const DEFAULT_EXPENSE_CATEGORIES = ['樓宇', '水電煤', '信用卡', '保險', '餐飲', '交通', '日常', '貸款', '教育', '醫療', '娛樂', '其他'];
 
 const POPULAR_DESTINATIONS = ['東京, 日本', '大阪, 日本', '台北, 台灣', '首爾, 韓國', '倫敦, 英國', '曼谷, 泰國', '新加坡', '悉尼, 澳洲', '北京, 中國', '上海, 中國', '福岡, 日本', '札幌, 日本'];
 
@@ -99,16 +100,35 @@ const calculatePackingProgress = (list) => {
     return total === 0 ? 0 : Math.round((packed / total) * 100);
 };
 
+// 頭像渲染共用組件 (支援 Emoji 與上傳圖片)
+const renderAvatar = (avatarValue) => {
+    if (!avatarValue) return '🧑';
+    if (avatarValue.startsWith('data:image') || avatarValue.startsWith('http')) {
+        return <img src={avatarValue} alt="avatar" className="w-full h-full object-cover" />;
+    }
+    return avatarValue;
+};
+
 // --- 3. Sub-Components ---
 
-// Dashboard (首頁) - 新增了個人當月開支卡片
+// Dashboard (首頁) - 加入時鐘、修復頭像與版面
 const DashboardView = ({ currentUser, members, wallets, events, trips, expenses, setActiveTab }) => {
-    const today = formatDate(new Date());
-    const currentYear = new Date().getFullYear();
-    const currentMonth = new Date().getMonth();
+    const [now, setNow] = useState(new Date());
     
-    const upcomingEvents = events.filter(e => e.date >= today && (e.participants || []).includes(currentUser.id)).sort((a,b) => a.date.localeCompare(b.date)).slice(0, 3);
-    const activeTrips = trips.filter(t => t.endDate >= today).sort((a,b) => a.startDate.localeCompare(b.startDate)).slice(0, 1);
+    useEffect(() => {
+        const timer = setInterval(() => setNow(new Date()), 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    const todayStr = formatDate(now);
+    const lunar = getLunarInfo(now);
+    const holiday = HK_HOLIDAYS[todayStr];
+
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    
+    const upcomingEvents = events.filter(e => e.date >= todayStr && (e.participants || []).includes(currentUser.id)).sort((a,b) => a.date.localeCompare(b.date)).slice(0, 3);
+    const activeTrips = trips.filter(t => t.endDate >= todayStr && (t.participants || []).includes(currentUser.id)).sort((a,b) => a.startDate.localeCompare(b.startDate)).slice(0, 1);
     
     const myWallet = wallets[currentUser.id] || { balance: 0, savings: 0, invested: 0 };
     const totalAssets = myWallet.balance + myWallet.savings + (myWallet.invested || 0);
@@ -133,10 +153,26 @@ const DashboardView = ({ currentUser, members, wallets, events, trips, expenses,
 
     return (
         <div className="space-y-6 pb-10">
+            {/* 資訊屏幕 (Info Screen) */}
+            <div className="bg-white rounded-[2rem] p-5 shadow-sm border border-slate-100 flex flex-col relative overflow-hidden">
+                <div className="absolute right-0 top-0 opacity-5 text-9xl pointer-events-none -mt-4 -mr-4">🕒</div>
+                <p className="text-xs font-bold text-slate-400 mb-1">{now.toLocaleDateString('zh-HK', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}</p>
+                <div className="flex items-end gap-3 flex-wrap">
+                    <span className="text-4xl font-black text-slate-800 tracking-tighter">{now.toLocaleTimeString('zh-HK', { hour12: false, hour: '2-digit', minute: '2-digit' })}</span>
+                    <div className="flex gap-2 mb-1.5">
+                        <span className="bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-lg text-[10px] font-black">{lunar.dayText} {lunar.auspicious}</span>
+                        {holiday && <span className="bg-red-50 text-red-500 px-2.5 py-1 rounded-lg text-[10px] font-black">{holiday}</span>}
+                    </div>
+                </div>
+            </div>
+
+            {/* 歡迎與資產卡片 */}
             <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-[2rem] p-6 shadow-lg text-white relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full -mr-10 -mt-10 blur-xl"></div>
                 <div className="flex items-center gap-4 mb-5">
-                    <div className="text-4xl bg-white/20 w-16 h-16 rounded-2xl flex items-center justify-center backdrop-blur-sm shadow-inner">{currentUser.avatar}</div>
+                    <div className="text-4xl bg-white/20 w-16 h-16 rounded-2xl flex items-center justify-center backdrop-blur-sm shadow-inner overflow-hidden">
+                        {renderAvatar(currentUser.avatar)}
+                    </div>
                     <div>
                         <h2 className="text-2xl font-black tracking-tight">早安, {currentUser.name.split(' ')[0]}</h2>
                         <p className="text-sm font-bold opacity-80">{isAdmin ? '家庭管理員，準備好今天的安排了嗎？' : '準備好完成今天的任務了嗎？'}</p>
@@ -144,18 +180,18 @@ const DashboardView = ({ currentUser, members, wallets, events, trips, expenses,
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {/* C-Dollar 卡片 */}
+                    {/* C-Dollar 儲備 */}
                     {(currentUser.permissions || []).includes('cdollar') && (
                         <div onClick={() => setActiveTab('cdollar')} className="bg-white/10 rounded-2xl p-4 backdrop-blur-md flex flex-col gap-2 cursor-pointer hover:bg-white/20 transition">
                             <div className="flex justify-between items-center">
-                                <p className="text-[10px] font-black uppercase tracking-widest opacity-80 flex items-center gap-1"><Award size={12}/> {isAdmin ? '家庭金融看板' : '總資產 (C-Dollar)'}</p>
+                                <p className="text-[10px] font-black uppercase tracking-widest opacity-90 flex items-center gap-1"><Award size={12}/> {isAdmin ? '全家金融儲備看板' : 'C-Dollar 總儲備'}</p>
                                 {!isAdmin && <p className="text-[9px] opacity-80">{convertToHKD(totalAssets)}</p>}
                             </div>
                             <p className="text-2xl font-black italic tracking-tighter drop-shadow-md">{isAdmin ? '管理模式' : formatCDollar(totalAssets)}</p>
                         </div>
                     )}
                     
-                    {/* 個人開支卡片 */}
+                    {/* 個人開支 */}
                     {(currentUser.permissions || []).includes('expenses') && !isAdmin && (
                         <div onClick={() => setActiveTab('expenses')} className="bg-orange-500/20 rounded-2xl p-4 backdrop-blur-md flex flex-col gap-2 cursor-pointer hover:bg-orange-500/30 transition border border-orange-400/30">
                             <div className="flex justify-between items-center">
@@ -186,7 +222,7 @@ const DashboardView = ({ currentUser, members, wallets, events, trips, expenses,
                                 <div className="flex items-center -space-x-1.5 mt-2">
                                     {ev.participants?.map(pId => {
                                         const mem = members.find(m => m.id === pId);
-                                        return mem ? <div key={pId} className="w-6 h-6 rounded-full overflow-hidden bg-slate-50 border-2 border-white text-[10px] flex items-center justify-center shadow-sm relative z-10" title={mem.name}>{mem.avatar}</div> : null;
+                                        return mem ? <div key={pId} className="w-6 h-6 rounded-full overflow-hidden bg-slate-50 border-2 border-white text-[10px] flex items-center justify-center shadow-sm relative z-10" title={mem.name}>{renderAvatar(mem.avatar)}</div> : null;
                                     })}
                                 </div>
                             </div>
@@ -370,7 +406,10 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                     <div className="grid grid-cols-2 gap-3">
                         {members.filter(m => m.role !== 'admin').map(m => (
                             <div key={m.id} className="bg-white/10 p-3 rounded-xl backdrop-blur-md border border-white/10">
-                                <p className="text-[10px] uppercase font-bold opacity-80 mb-1 flex items-center gap-1">{m.avatar} {m.name.split(' ')[0]}</p>
+                                <div className="flex items-center gap-2 mb-1">
+                                    <div className="w-5 h-5 rounded-full overflow-hidden bg-white/20 text-xs flex justify-center items-center">{renderAvatar(m.avatar)}</div>
+                                    <p className="text-[10px] uppercase font-bold opacity-80">{m.name.split(' ')[0]}</p>
+                                </div>
                                 <p className="text-xl font-black italic">{formatCDollar(wallets[m.id]?.balance)}</p>
                                 <p className="text-[10px] opacity-60 mt-1 font-bold">存款: {formatCDollar(wallets[m.id]?.savings)} | 投資: {formatCDollar(wallets[m.id]?.invested)}</p>
                             </div>
@@ -399,34 +438,35 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
             <div className="flex-1 overflow-y-auto px-4 space-y-4 pb-32">
                 {activeSubTab === 'wallet' && (
                     <div className="space-y-6">
-                        {pendingRequests.length > 0 && (
-                            <div className="bg-orange-50 border border-orange-100 p-4 rounded-2xl">
-                                <h4 className="font-black text-orange-800 mb-3 flex items-center gap-2"><Bell size={16}/> {isAdmin ? '待處理申請 (家長審批)' : '我的申請進度'}</h4>
-                                <div className="space-y-3">
-                                    {pendingRequests.map(req => (
-                                        <div key={req.id} className="bg-white p-3 rounded-xl shadow-sm flex justify-between items-center border border-orange-100/50">
-                                            <div>
-                                                <p className="font-bold text-slate-800 text-sm">{isAdmin && <span className="text-indigo-600 mr-1">{req.memberName}</span>}{req.title}</p>
-                                                <p className={`font-black text-xs italic ${req.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>{req.amount > 0 ? '+' : ''}{formatCDollar(Math.abs(req.amount))}</p>
-                                            </div>
-                                            {isAdmin ? (
-                                                <div className="flex gap-2"><button onClick={() => handleRequestApproval(req, false)} className="px-3 py-1.5 bg-slate-100 text-slate-500 rounded-lg text-xs font-black hover:bg-red-50 hover:text-red-500">拒絕</button><button onClick={() => handleRequestApproval(req, true)} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-black shadow-md active:scale-95">批准</button></div>
-                                            ) : <span className="text-[10px] font-black text-orange-500 bg-orange-100 px-2 py-1 rounded">等待父母審核</span>}
+                        {/* 審批區域 */}
+                        <div className="bg-orange-50 border border-orange-100 p-4 rounded-2xl">
+                            <h4 className="font-black text-orange-800 mb-3 flex items-center gap-2"><Bell size={16}/> {isAdmin ? '待處理申請 (家長審批)' : '我的申請進度'}</h4>
+                            <div className="space-y-3">
+                                {pendingRequests.length > 0 ? pendingRequests.map(req => (
+                                    <div key={req.id} className="bg-white p-3 rounded-xl shadow-sm flex justify-between items-center border border-orange-100/50">
+                                        <div>
+                                            <p className="font-bold text-slate-800 text-sm">{isAdmin && <span className="text-indigo-600 mr-1">{req.memberName}</span>}{req.title}</p>
+                                            <p className={`font-black text-xs italic ${req.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>{req.amount > 0 ? '+' : ''}{formatCDollar(Math.abs(req.amount))}</p>
                                         </div>
-                                    ))}
-                                </div>
+                                        {isAdmin ? (
+                                            <div className="flex gap-2"><button onClick={() => handleRequestApproval(req, false)} className="px-3 py-1.5 bg-slate-100 text-slate-500 rounded-lg text-xs font-black hover:bg-red-50 hover:text-red-500">拒絕</button><button onClick={() => handleRequestApproval(req, true)} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-black shadow-md active:scale-95">批准</button></div>
+                                        ) : <span className="text-[10px] font-black text-orange-500 bg-orange-100 px-2 py-1 rounded">等待父母審核</span>}
+                                    </div>
+                                )) : <p className="text-xs font-bold text-orange-400 italic">目前沒有待處理的申請</p>}
                             </div>
-                        )}
+                        </div>
+
+                        {/* 交易紀錄 */}
                         <div>
                             <h4 className="font-black text-slate-800 mb-3">資金明細紀錄</h4>
                             <div className="space-y-3">
                                 {myTransactions.length > 0 ? myTransactions.map(tx => (
                                     <div key={tx.id} className="bg-white p-4 rounded-2xl flex justify-between items-center shadow-sm border border-slate-100 group">
                                         <div className="flex items-center gap-3">
-                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${tx.amount > 0 ? 'bg-green-50 text-green-600':'bg-red-50 text-red-600'}`}>{tx.amount > 0 ? <TrendingUp size={18}/> : <MinusCircle size={18}/>}</div>
-                                            <div><p className="font-bold text-slate-800 text-sm">{tx.reason}</p><p className="text-[10px] text-slate-400 font-bold">{tx.date.split('T')[0]} {isAdmin && `· ${members.find(m=>m.id===tx.memberId)?.name.split(' ')[0]}`}</p></div>
+                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${tx.amount > 0 ? 'bg-green-50 text-green-600':'bg-red-50 text-red-600'}`}>{tx.amount > 0 ? <TrendingUp size={18}/> : <MinusCircle size={18}/>}</div>
+                                            <div><p className="font-bold text-slate-800 text-sm leading-tight">{tx.reason}</p><p className="text-[10px] text-slate-400 font-bold mt-1">{tx.date.split('T')[0]} {isAdmin && `· ${members.find(m=>m.id===tx.memberId)?.name.split(' ')[0]}`}</p></div>
                                         </div>
-                                        <div className="flex items-center gap-3">
+                                        <div className="flex items-center gap-3 shrink-0">
                                             <p className={`font-black text-lg italic ${tx.amount > 0 ? 'text-green-600':'text-red-600'}`}>{tx.amount > 0 ? '+' : ''}{formatCDollar(Math.abs(tx.amount))}</p>
                                             {isAdmin && <button onClick={() => handleAdminDelete('tx', tx.id)} className="text-slate-300 hover:text-red-500 transition-colors p-1"><Trash2 size={16}/></button>}
                                         </div>
@@ -437,6 +477,7 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                     </div>
                 )}
 
+                {/* 任務大廳 */}
                 {activeSubTab === 'tasks' && (
                     <div className="space-y-3">
                         {isAdmin && <button onClick={() => handleAdminAdd('tasks')} className="w-full bg-indigo-50 text-indigo-600 border border-indigo-100 py-3 rounded-2xl font-black flex justify-center items-center gap-2 mb-4"><Plus size={18}/> 發佈新任務</button>}
@@ -449,6 +490,7 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                     </div>
                 )}
 
+                {/* 兌換商城 */}
                 {activeSubTab === 'shop' && (
                     <div className="space-y-4">
                         {isAdmin && <button onClick={() => handleAdminAdd('shop')} className="w-full bg-indigo-50 text-indigo-600 border border-indigo-100 py-3 rounded-2xl font-black flex justify-center items-center gap-2"><Plus size={18}/> 上架新產品</button>}
@@ -464,6 +506,7 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                     </div>
                 )}
 
+                {/* 投資理財 */}
                 {activeSubTab === 'invest' && (
                     <div className="space-y-4">
                         {isAdmin && <button onClick={() => handleAdminAdd('invest')} className="w-full bg-indigo-50 text-indigo-600 border border-indigo-100 py-3 rounded-2xl font-black flex justify-center items-center gap-2 mb-4"><Plus size={18}/> 發行新金融產品</button>}
@@ -502,6 +545,7 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                     </div>
                 )}
 
+                {/* 央行與存款 */}
                 {activeSubTab === 'bank' && (
                     <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm text-center">
                         <div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4"><Landmark size={40} className="text-indigo-500" /></div>
@@ -529,7 +573,9 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                                     </p>
                                     {members.filter(m => m.role !== 'admin').map(m => (
                                         <div key={m.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col gap-3">
-                                            <p className="font-black text-slate-800 flex items-center gap-2">{m.avatar} {m.name}</p>
+                                            <div className="font-black text-slate-800 flex items-center gap-2">
+                                                <div className="w-6 h-6 rounded-full overflow-hidden text-xs flex justify-center items-center">{renderAvatar(m.avatar)}</div> {m.name}
+                                            </div>
                                             <div className="flex items-center gap-2">
                                                 <span className="text-xs font-bold text-slate-400 w-10">餘額</span>
                                                 <input type="number" className="flex-1 p-2 rounded-lg border border-slate-200 focus:border-indigo-500 outline-none text-sm font-bold shadow-sm" value={adminBankInputs[m.id]?.balance ?? wallets[m.id]?.balance ?? 0} onChange={e => handleAdminBankInputChange(m.id, 'balance', e.target.value)} />
@@ -566,16 +612,15 @@ const ExpenseFormModal = ({ isOpen, onClose, onSave, onDelete, initialData, memb
                 <label className="text-xs font-bold text-slate-400 block mb-2">開支歸屬 (誰的開支？)</label>
                 <div className="flex flex-wrap gap-2">
                     {members.map(m => (
-                        <button key={m.id} onClick={() => setFormData({...formData, memberId: m.id})} className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ${formData.memberId === m.id ? 'bg-indigo-100 border-indigo-200 text-indigo-700' : 'bg-slate-50 text-slate-400 border-transparent'}`}>{m.avatar} {m.name.split(' ')[0]}</button>
+                        <button key={m.id} onClick={() => setFormData({...formData, memberId: m.id})} className={`px-3 py-1.5 rounded-full text-xs font-bold border transition flex items-center gap-1.5 ${formData.memberId === m.id ? 'bg-indigo-100 border-indigo-200 text-indigo-700' : 'bg-slate-50 text-slate-400 border-transparent'}`}>
+                            <div className="w-4 h-4 rounded-full overflow-hidden flex items-center justify-center bg-white/50">{renderAvatar(m.avatar)}</div> {m.name.split(' ')[0]}
+                        </button>
                     ))}
                 </div>
             </div>
             
-            {/* 新增歷史紀錄 Autocomplete */}
             <input list="expense-names" className="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold" value={formData.name || ''} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="開支內容 (輸入以搜尋歷史紀錄)"/>
-            <datalist id="expense-names">
-                {historicalNames.map((n, i) => <option key={i} value={n} />)}
-            </datalist>
+            <datalist id="expense-names">{historicalNames.map((n, i) => <option key={i} value={n} />)}</datalist>
             
             <div className="flex gap-2">
                 <div className="relative flex-1">
@@ -626,7 +671,7 @@ const EventFormModal = ({ isOpen, onClose, onSave, onDelete, initialData, catego
                     <input className="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold focus:ring-2 ring-indigo-500" placeholder="活動標題" value={formData.title || ''} onChange={e => setFormData({...formData, title: e.target.value})} />
                     <div className="flex flex-wrap gap-2">{categories.map(cat => (<button key={cat.id} onClick={() => setFormData({...formData, type: cat.id})} className={`px-4 py-1.5 rounded-full text-xs font-bold border transition ${formData.type === cat.id ? `${cat.color} scale-105 shadow-sm` : 'bg-white text-slate-400'}`}>{cat.name}</button>))}</div>
                     <div className="flex gap-2"><input type="date" className="flex-1 bg-slate-50 border-none rounded-2xl p-4 font-bold" value={formData.date || ''} onChange={e => setFormData({...formData, date: e.target.value})} /><div className="flex flex-col gap-1 w-32"><input type="time" className="w-full bg-slate-50 border-none rounded-xl p-2 font-bold text-sm" value={formData.startTime || ''} onChange={e => setFormData({...formData, startTime: e.target.value})} /><input type="time" className="w-full bg-slate-50 border-none rounded-xl p-2 font-bold text-sm" value={formData.endTime || ''} onChange={e => setFormData({...formData, endTime: e.target.value})} /></div></div>
-                    <div><label className="text-xs font-bold text-slate-400 block mb-2">參與成員</label><div className="flex flex-wrap gap-2">{members.map(m => (<button key={m.id} onClick={() => { const newP = (formData.participants||[]).includes(m.id) ? formData.participants.filter(p => p !== m.id) : [...(formData.participants||[]), m.id]; setFormData({...formData, participants: newP}); }} className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ${(formData.participants||[]).includes(m.id) ? `${m.color}` : 'bg-slate-50 text-slate-400'}`}>{m.name.split(' ')[0]}</button>))}</div></div>
+                    <div><label className="text-xs font-bold text-slate-400 block mb-2">參與成員</label><div className="flex flex-wrap gap-2">{members.map(m => (<button key={m.id} onClick={() => { const newP = (formData.participants||[]).includes(m.id) ? formData.participants.filter(p => p !== m.id) : [...(formData.participants||[]), m.id]; setFormData({...formData, participants: newP}); }} className={`px-3 py-1.5 rounded-full text-xs font-bold border transition flex items-center gap-1 ${(formData.participants||[]).includes(m.id) ? `${m.color}` : 'bg-slate-50 text-slate-400'}`}><div className="w-4 h-4 rounded-full overflow-hidden flex items-center justify-center bg-white/50">{renderAvatar(m.avatar)}</div> {m.name.split(' ')[0]}</button>))}</div></div>
                     <textarea className="w-full bg-slate-50 border-none rounded-2xl p-4 text-sm resize-none h-20" placeholder="備註..." value={formData.notes || ''} onChange={e => setFormData({...formData, notes: e.target.value})}></textarea>
                     <div className="flex gap-2 pt-4">{formData?.id && <button onClick={() => onDelete('events', formData.id)} className="p-4 text-red-500 bg-red-50 rounded-2xl"><Trash2/></button>}<button onClick={() => onSave(formData)} className="flex-1 bg-indigo-600 text-white py-4 rounded-2xl font-black shadow-lg shadow-indigo-200 active:scale-95 transition">確認儲存</button></div>
                 </div>
@@ -690,7 +735,7 @@ const EditPermissionsModal = ({ isOpen, onClose, onSave, member }) => {
     return (
         <div className="fixed inset-0 bg-slate-900/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
             <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl w-full max-w-sm">
-                <h3 className="font-black text-xl mb-6">修改權限 - {member.name.split(' ')[0]}</h3>
+                <h3 className="font-black text-xl mb-6 flex items-center gap-2">修改權限 <div className="w-6 h-6 rounded-full overflow-hidden text-sm flex items-center justify-center bg-slate-100">{renderAvatar(member.avatar)}</div> {member.name.split(' ')[0]}</h3>
                 <div className="grid grid-cols-2 gap-3 mb-6">
                     {Object.keys(permissions).map(p => (
                         <label key={p} className="flex items-center gap-2 text-sm font-bold text-slate-700 cursor-pointer"><input type="checkbox" className="w-4 h-4 rounded text-indigo-600" checked={permissions[p]} onChange={e => setPermissions({...permissions, [p]: e.target.checked})} /><span>{p==='home'?'首頁':p==='calendar'?'日曆':p==='expenses'?'開支':p==='travel'?'旅行':p==='cdollar'?'C-Dollar':'設定'}</span></label>
@@ -730,7 +775,6 @@ export default function App() {
   const [calendarView, setCalendarView] = useState('month'); 
   const [hoveredEvent, setHoveredEvent] = useState(null); 
 
-  // 新增：開支時間篩選器與使用者篩選器
   const [expenseMonth, setExpenseMonth] = useState(new Date().getMonth());
   const [expenseYear, setExpenseYear] = useState(new Date().getFullYear());
   const [expenseViewMember, setExpenseViewMember] = useState('all');
@@ -747,10 +791,7 @@ export default function App() {
   const [eventFormData, setEventFormData] = useState({});
   const [expenseFormData, setExpenseFormData] = useState({});
 
-  // 擷取歷史開支名稱以供 Autocomplete 使用
-  const historicalExpenseNames = useMemo(() => {
-      return [...new Set(expenses.map(e => e.name).filter(Boolean))];
-  }, [expenses]);
+  const historicalExpenseNames = useMemo(() => { return [...new Set(expenses.map(e => e.name).filter(Boolean))]; }, [expenses]);
 
   const NAV_ITEMS = [
     { id: 'home', icon: Home, label: '首頁', perm: 'home' },
@@ -895,7 +936,8 @@ export default function App() {
              </div>
              {dayEvents.length === 0 ? (
                  <div className="text-center text-slate-300 py-10 flex flex-col items-center">
-                     <div className="w-20 h-20 bg-slate-100 rounded-[2rem] flex items-center justify-center mb-4"><CalendarIcon size={32}/></div><p className="font-bold italic">今天沒有安排事項</p>
+                     <div className="w-20 h-20 bg-slate-100 rounded-[2rem] flex items-center justify-center mb-4"><CalendarIcon size={32}/></div>
+                     <p className="font-bold italic">今天沒有安排事項</p>
                  </div>
              ) : (
                  <div className="space-y-4">
@@ -904,11 +946,19 @@ export default function App() {
                          const isPast = new Date(`${ev.date}T${ev.endTime||'23:59'}`) < new Date();
                          return (
                            <div key={ev.id} onClick={() => { setEventFormData(ev); setShowEventModal(true); }} className={`flex gap-4 p-5 rounded-[2rem] border transition-transform active:scale-[0.98] cursor-pointer ${isPast ? 'opacity-50 bg-slate-50 border-slate-100' : 'bg-white shadow-sm border-slate-100'}`}>
-                              <div className="flex flex-col items-center justify-center w-16 border-r pr-4 border-slate-100"><span className="text-sm font-black text-slate-800">{ev.startTime}</span>{ev.endTime && <><div className="h-4 w-[2px] bg-slate-100 my-1"></div><span className="text-xs font-bold text-slate-400">{ev.endTime}</span></>}</div>
+                              <div className="flex flex-col items-center justify-center w-16 border-r pr-4 border-slate-100">
+                                  <span className="text-sm font-black text-slate-800">{ev.startTime}</span>
+                                  {ev.endTime && <><div className="h-4 w-[2px] bg-slate-100 my-1"></div><span className="text-xs font-bold text-slate-400">{ev.endTime}</span></>}
+                              </div>
                               <div className="flex-1 min-w-0">
                                   <div className="flex items-center gap-2 mb-1">
                                       <span className={`w-3 h-3 rounded-full shrink-0 ${cat.color.replace('text', 'bg').split(' ')[0]}`}></span>
-                                      <div className="flex items-center -space-x-1.5 shrink-0">{ev.participants?.map(p => { const mem = members.find(m=>m.id===p); return mem ? <div key={p} className="w-5 h-5 rounded-full overflow-hidden bg-slate-100 border-2 border-white text-[10px] flex items-center justify-center shadow-sm relative z-10" title={mem.name}>{mem.avatar}</div> : null })}</div>
+                                      <div className="flex items-center -space-x-1.5 shrink-0">
+                                          {ev.participants?.map(p => { 
+                                              const mem = members.find(m=>m.id===p); 
+                                              return mem ? <div key={p} className="w-5 h-5 rounded-full overflow-hidden bg-slate-100 border border-slate-200 text-[10px] flex items-center justify-center shadow-sm relative z-10" title={mem.name}>{renderAvatar(mem.avatar)}</div> : null 
+                                          })}
+                                      </div>
                                       <span className="font-black text-lg text-slate-800 truncate">{ev.title}</span>
                                   </div>
                                   {ev.notes && <div className="text-xs font-bold text-slate-400 truncate mb-1">{ev.notes}</div>}
@@ -931,8 +981,30 @@ export default function App() {
       const dayEvents = events.filter(e => e.date === dateStr);
       days.push(
         <div key={d} onClick={() => { setCurrentDate(dateObj); setCalendarView('day'); }} className={`h-28 border-r border-b p-1.5 relative hover:bg-indigo-50/50 transition-colors cursor-pointer ${isToday ? 'bg-indigo-50/30' : 'bg-white'}`}>
-           <div className="flex justify-between items-start"><span className={`text-sm font-black w-6 h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-700'}`}>{d}</span><div className="flex flex-col items-end"><span className="text-[9px] font-bold text-slate-400">{lunar.dayText}</span>{lunar.auspicious && <span className="text-[8px] font-bold text-orange-500 scale-90 origin-right border border-orange-200 rounded px-1 bg-orange-50 mt-0.5 whitespace-nowrap">{lunar.auspicious}</span>}{holiday && <span className="text-[9px] font-black text-red-500 mt-0.5">{holiday}</span>}</div></div>
-           <div className="mt-1 flex flex-col gap-1 overflow-hidden h-[calc(100%-28px)]">{dayEvents.slice(0, 3).map(ev => { const cat = categories.find(c => c.id === ev.type) || categories[0]; return (<div key={ev.id} onMouseEnter={(e) => setHoveredEvent({ event: ev, x: e.clientX, y: e.clientY })} onMouseLeave={() => setHoveredEvent(null)} onClick={(e) => { e.stopPropagation(); setEventFormData(ev); setShowEventModal(true); }} className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md truncate border flex items-center gap-1 ${cat.color}`}><div className="flex -space-x-1 shrink-0">{ev.participants?.slice(0,3).map(p => {const mem = members.find(m=>m.id===p); return mem ? <span key={p} className="text-[8px] drop-shadow-sm z-10 relative">{mem.avatar}</span> : null;})}</div><span className="truncate">{ev.title}</span></div>); })}</div>
+           <div className="flex justify-between items-start">
+               <span className={`text-sm font-black w-6 h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-700'}`}>{d}</span>
+               <div className="flex flex-col items-end">
+                   <span className="text-[9px] font-bold text-slate-400">{lunar.dayText}</span>
+                   {lunar.auspicious && <span className="text-[8px] font-bold text-orange-500 scale-90 origin-right border border-orange-200 rounded px-1 bg-orange-50 mt-0.5 whitespace-nowrap">{lunar.auspicious}</span>}
+                   {holiday && <span className="text-[9px] font-black text-red-500 mt-0.5">{holiday}</span>}
+               </div>
+           </div>
+           <div className="mt-1 flex flex-col gap-1 overflow-hidden h-[calc(100%-28px)]">
+             {dayEvents.slice(0, 3).map(ev => { 
+                 const cat = categories.find(c => c.id === ev.type) || categories[0]; 
+                 return (
+                    <div key={ev.id} onMouseEnter={(e) => setHoveredEvent({ event: ev, x: e.clientX, y: e.clientY })} onMouseLeave={() => setHoveredEvent(null)} onClick={(e) => { e.stopPropagation(); setEventFormData(ev); setShowEventModal(true); }} className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md truncate border flex items-center gap-1 ${cat.color}`}>
+                        <div className="flex -space-x-1 shrink-0">
+                            {ev.participants?.slice(0,3).map(p => {
+                                const mem = members.find(m=>m.id===p);
+                                return mem ? <span key={p} className="w-3 h-3 rounded-full overflow-hidden inline-block text-[6px] drop-shadow-sm z-10 relative">{renderAvatar(mem.avatar)}</span> : null;
+                            })}
+                        </div>
+                        <span className="truncate">{ev.title}</span>
+                    </div>
+                 ); 
+             })}
+           </div>
         </div>
       );
     }
@@ -940,10 +1012,8 @@ export default function App() {
   };
 
   const renderExpenses = () => {
-     // 取出篩選目標 (Admin 才能切換所有人)
      const viewMemberId = currentUserRole.role === 'admin' ? expenseViewMember : currentUserRole.id;
      
-     // 根據時間區間推算應呈現的預算
      const displayExpenses = expenses.filter(e => viewMemberId === 'all' || e.memberId === viewMemberId).map(e => {
         let periodKey = ''; let amountMultiplier = 1; let isApplicable = false;
         const eDate = new Date(e.date || new Date().toISOString());
@@ -957,7 +1027,7 @@ export default function App() {
                 isApplicable = true; periodKey = `paid_${expenseYear}_${expenseMonth}_monthly`; break;
             case 'yearly':
                 isApplicable = eDate.getMonth() === expenseMonth; periodKey = `paid_${expenseYear}_${expenseMonth}_yearly`; break;
-            default: // 單次 none
+            default: 
                 isApplicable = eDate.getFullYear() === expenseYear && eDate.getMonth() === expenseMonth; periodKey = `paid_${e.id}_oneoff`; break;
         }
         
@@ -975,7 +1045,6 @@ export default function App() {
                <button onClick={() => {setExpenseFormData({recurringPeriod: 'monthly', category: expenseCategories[0], date: formatDate(new Date())}); setShowExpenseModal(true);}} className="bg-indigo-600 text-white p-3 rounded-2xl shadow-lg shadow-indigo-200 active:scale-95"><Plus size={20}/></button>
            </div>
            
-           {/* 時間與成員篩選器 */}
            <div className="flex flex-wrap gap-2 mb-6">
                <div className="flex items-center bg-white border border-slate-200 rounded-xl px-3 py-1 shadow-sm">
                    <Filter size={14} className="text-slate-400 mr-2"/>
@@ -1006,7 +1075,7 @@ export default function App() {
                                <button onClick={() => handleToggleExpensePaid(item.id, item.periodKey)} className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all shrink-0 ${isPaid ? 'bg-green-500 text-white shadow-md' : 'bg-slate-100 text-slate-300 hover:bg-slate-200'}`}>{isPaid && <Check size={16} strokeWidth={3}/>}</button>
                                <div onClick={() => {setExpenseFormData(item); setShowExpenseModal(true);}} className="cursor-pointer">
                                    <div className="flex items-center gap-2 mb-0.5">
-                                       <span className="text-sm bg-white border border-slate-200 rounded-full w-5 h-5 flex items-center justify-center shadow-sm" title={member?.name}>{member?.avatar}</span>
+                                       <span className="text-sm bg-white border border-slate-200 rounded-full w-5 h-5 flex items-center justify-center shadow-sm overflow-hidden" title={member?.name}>{renderAvatar(member?.avatar)}</span>
                                        <span className={`font-black text-lg ${isPaid ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{item.name}</span>
                                    </div>
                                    <div className="text-xs font-bold text-slate-400 flex items-center gap-2">
@@ -1053,7 +1122,7 @@ export default function App() {
           <h2 className="text-2xl font-black text-slate-800">系統設定</h2>
           <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-50 text-center md:text-left md:flex items-center justify-between">
               <div className="flex flex-col md:flex-row items-center gap-4 mb-6 md:mb-0">
-                  <div className="text-5xl w-24 h-24 bg-slate-50 rounded-[2rem] flex items-center justify-center shadow-inner">{currentUserRole.avatar}</div>
+                  <div className="text-5xl w-24 h-24 bg-slate-50 rounded-[2rem] flex items-center justify-center shadow-inner overflow-hidden">{renderAvatar(currentUserRole.avatar)}</div>
                   <div><p className="font-black text-2xl text-slate-800">{currentUserRole.name}</p><p className="text-indigo-500 font-bold text-sm uppercase tracking-widest">{currentUserRole.role}</p></div>
               </div>
           </div>
@@ -1067,7 +1136,7 @@ export default function App() {
                       {members.map(m => (
                           <div key={m.id} className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-slate-50 rounded-2xl gap-4 border border-slate-100">
                               <div className="flex items-center gap-4">
-                                  <div className="text-3xl bg-white w-12 h-12 rounded-xl flex items-center justify-center shadow-sm shrink-0">{m.avatar}</div>
+                                  <div className="text-3xl bg-white w-12 h-12 rounded-xl flex items-center justify-center shadow-sm shrink-0 overflow-hidden">{renderAvatar(m.avatar)}</div>
                                   <div>
                                       <div className="font-black text-slate-800">{m.name}</div>
                                       <div className="text-[10px] font-bold text-slate-400 uppercase flex gap-1 mt-1 flex-wrap">
@@ -1108,7 +1177,7 @@ export default function App() {
         return (
             <div className="h-[100dvh] bg-slate-50 flex flex-col items-center justify-center p-6">
                 <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl w-full max-w-sm text-center">
-                    <div className="w-24 h-24 bg-slate-50 rounded-full mx-auto flex items-center justify-center text-5xl mb-6 shadow-inner">{loginTarget.avatar}</div>
+                    <div className="w-24 h-24 bg-slate-50 rounded-full mx-auto flex items-center justify-center text-5xl mb-6 shadow-inner overflow-hidden">{renderAvatar(loginTarget.avatar)}</div>
                     <h2 className="text-2xl font-black mb-2">{loginTarget.name}</h2>
                     <p className="text-sm font-bold text-slate-400 mb-8">請輸入安全密碼</p>
                     <input type="password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleLoginSubmit()} className="w-full bg-slate-50 border-none rounded-2xl p-4 font-black text-center text-2xl tracking-widest focus:ring-2 ring-indigo-500 mb-6" placeholder="******" autoFocus />
@@ -1124,7 +1193,8 @@ export default function App() {
         <div className="grid grid-cols-2 gap-4 w-full max-w-sm">
           {members.map(m => (
             <button key={m.id} onClick={() => setLoginTarget(m)} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col items-center gap-3 active:scale-95 transition-all hover:border-indigo-200">
-              <span className="text-5xl drop-shadow-sm">{m.avatar}</span><span className="font-black text-slate-700">{m.name.split(' ')[0]}</span>
+              <span className="text-5xl drop-shadow-sm w-14 h-14 rounded-full overflow-hidden flex items-center justify-center">{renderAvatar(m.avatar)}</span>
+              <span className="font-black text-slate-700">{m.name.split(' ')[0]}</span>
             </button>
           ))}
         </div>
@@ -1149,7 +1219,7 @@ export default function App() {
         <header className="md:hidden pt-safe bg-white/90 backdrop-blur-xl border-b border-slate-100 px-6 py-4 flex justify-between items-center sticky top-0 z-50">
           <h1 className="font-black text-xl text-slate-800 italic tracking-tight">Charles Family</h1>
           <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-slate-50 flex items-center justify-center border border-slate-200 text-lg shadow-sm">{currentUserRole.avatar}</div>
+              <div className="w-9 h-9 rounded-full bg-slate-50 flex items-center justify-center border border-slate-200 text-lg shadow-sm overflow-hidden">{renderAvatar(currentUserRole.avatar)}</div>
               <button onClick={() => setCurrentUserRole(null)} className="p-2 bg-slate-100 rounded-full text-slate-500 active:scale-90"><LogOut size={16}/></button>
           </div>
         </header>
