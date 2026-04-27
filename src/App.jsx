@@ -27,6 +27,10 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = 'charles-family-app';
 
+// 🚀 核心修復：使用全域固定的家庭資料庫路徑，不再依賴會變動的匿名 UID
+const getCol = (colName) => collection(db, 'artifacts', appId, 'family', 'main', colName);
+const getDoc = (colName, id) => doc(db, 'artifacts', appId, 'family', 'main', colName, id);
+
 // --- 2. Constants & Core Data ---
 const EXCHANGE_RATE_CNY_HKD = 1.08; 
 
@@ -45,20 +49,13 @@ const DEFAULT_CATEGORIES = [
   { id: 'competition', name: '外出比賽', color: 'bg-purple-100 text-purple-800 border-purple-200', type: 'custom' },
 ];
 
-// 擴充預設的開支分類
 const DEFAULT_EXPENSE_CATEGORIES = ['樓宇', '水電煤', '信用卡', '保險', '餐飲', '交通', '日常', '貸款', '教育', '醫療', '娛樂', '其他'];
-
 const POPULAR_DESTINATIONS = ['東京, 日本', '大阪, 日本', '台北, 台灣', '首爾, 韓國', '倫敦, 英國', '曼谷, 泰國', '新加坡', '悉尼, 澳洲', '北京, 中國', '上海, 中國', '福岡, 日本', '札幌, 日本'];
 
 const HK_HOLIDAYS = {
   '2025-01-01': '元旦', '2025-01-29': '農曆年初一', '2025-01-30': '農曆年初二', '2025-01-31': '農曆年初三',
   '2025-04-04': '清明節', '2025-04-18': '耶穌受難節', '2025-04-19': '耶穌受難節翌日', '2025-04-21': '復活節一',
-  '2025-05-01': '勞動節', '2025-05-05': '佛誕', '2025-05-31': '端午節', '2025-07-01': '特區紀念日',
-  '2025-10-01': '國慶', '2025-10-07': '中秋翌日', '2025-10-29': '重陽節', '2025-12-25': '聖誕節', '2025-12-26': '拆禮物日',
-  '2026-01-01': '元旦', '2026-02-17': '農曆年初一', '2026-02-18': '農曆年初二', '2026-02-19': '農曆年初三',
-  '2026-04-03': '耶穌受難節', '2026-04-04': '清明節', '2026-04-06': '復活節一', '2026-05-01': '勞動節',
-  '2026-05-24': '佛誕', '2026-06-19': '端午節', '2026-07-01': '特區紀念日', '2026-10-01': '國慶',
-  '2026-09-26': '中秋翌日', '2026-10-18': '重陽節', '2026-12-25': '聖誕節', '2026-12-26': '拆禮物日'
+  '2026-01-01': '元旦', '2026-02-17': '農曆年初一'
 };
 
 const LUNAR_DATA = [{ day: 1, text: '初一', ausp: '宜祭祀 祈福' }, { day: 15, text: '十五', ausp: '宜祭祀' }, { day: 2, text: '初二', ausp: '宜出行' }, { day: 8, text: '初八', ausp: '諸事不宜' }, { day: 16, text: '十六', ausp: '宜開市' }, { day: 23, text: '廿三', ausp: '宜大掃除' }];
@@ -91,8 +88,6 @@ const getLunarInfo = (date) => {
   const randAusp = (day % 5 === 0) ? '宜會友' : (day % 7 === 0 ? '忌遠行' : '');
   return { dayText: idx === 0 ? '初一' : `${idx + 1}`, auspicious: randAusp };
 };
-const isDateInRange = (dateStr, startDateStr, endDateStr) => dateStr >= startDateStr && dateStr <= endDateStr;
-const getDaysDiff = (start, end) => Math.ceil(Math.abs(new Date(end) - new Date(start)) / (1000 * 60 * 60 * 24)) + 1;
 const calculatePackingProgress = (list) => {
     if (!list) return 0; let total = 0, packed = 0;
     (list.shared || []).forEach(i => { total++; if(i.packed) packed++; });
@@ -100,7 +95,6 @@ const calculatePackingProgress = (list) => {
     return total === 0 ? 0 : Math.round((packed / total) * 100);
 };
 
-// 頭像渲染共用組件 (支援 Emoji 與上傳圖片)
 const renderAvatar = (avatarValue) => {
     if (!avatarValue) return '🧑';
     if (avatarValue.startsWith('data:image') || avatarValue.startsWith('http')) {
@@ -111,21 +105,12 @@ const renderAvatar = (avatarValue) => {
 
 // --- 3. Sub-Components ---
 
-// Dashboard (首頁) - 加入時鐘、修復頭像與版面
 const DashboardView = ({ currentUser, members, wallets, events, trips, expenses, setActiveTab }) => {
     const [now, setNow] = useState(new Date());
+    useEffect(() => { const timer = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(timer); }, []);
     
-    useEffect(() => {
-        const timer = setInterval(() => setNow(new Date()), 1000);
-        return () => clearInterval(timer);
-    }, []);
-
-    const todayStr = formatDate(now);
-    const lunar = getLunarInfo(now);
-    const holiday = HK_HOLIDAYS[todayStr];
-
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth();
+    const todayStr = formatDate(now); const lunar = getLunarInfo(now); const holiday = HK_HOLIDAYS[todayStr];
+    const currentYear = now.getFullYear(); const currentMonth = now.getMonth();
     
     const upcomingEvents = events.filter(e => e.date >= todayStr && (e.participants || []).includes(currentUser.id)).sort((a,b) => a.date.localeCompare(b.date)).slice(0, 3);
     const activeTrips = trips.filter(t => t.endDate >= todayStr && (t.participants || []).includes(currentUser.id)).sort((a,b) => a.startDate.localeCompare(b.startDate)).slice(0, 1);
@@ -134,7 +119,6 @@ const DashboardView = ({ currentUser, members, wallets, events, trips, expenses,
     const totalAssets = myWallet.balance + myWallet.savings + (myWallet.invested || 0);
     const isAdmin = currentUser.role === 'admin';
 
-    // 計算個人本月開支
     const myDisplayExpenses = expenses.filter(e => e.memberId === currentUser.id).map(e => {
         let periodKey = ''; let amountMultiplier = 1; let isApplicable = false;
         const eDate = new Date(e.date || new Date().toISOString());
@@ -153,51 +137,32 @@ const DashboardView = ({ currentUser, members, wallets, events, trips, expenses,
 
     return (
         <div className="space-y-6 pb-10">
-            {/* 資訊屏幕 (Info Screen) */}
             <div className="bg-white rounded-[2rem] p-5 shadow-sm border border-slate-100 flex flex-col relative overflow-hidden">
                 <div className="absolute right-0 top-0 opacity-5 text-9xl pointer-events-none -mt-4 -mr-4">🕒</div>
                 <p className="text-xs font-bold text-slate-400 mb-1">{now.toLocaleDateString('zh-HK', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}</p>
                 <div className="flex items-end gap-3 flex-wrap">
                     <span className="text-4xl font-black text-slate-800 tracking-tighter">{now.toLocaleTimeString('zh-HK', { hour12: false, hour: '2-digit', minute: '2-digit' })}</span>
-                    <div className="flex gap-2 mb-1.5">
-                        <span className="bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-lg text-[10px] font-black">{lunar.dayText} {lunar.auspicious}</span>
-                        {holiday && <span className="bg-red-50 text-red-500 px-2.5 py-1 rounded-lg text-[10px] font-black">{holiday}</span>}
-                    </div>
+                    <div className="flex gap-2 mb-1.5"><span className="bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-lg text-[10px] font-black">{lunar.dayText} {lunar.auspicious}</span>{holiday && <span className="bg-red-50 text-red-500 px-2.5 py-1 rounded-lg text-[10px] font-black">{holiday}</span>}</div>
                 </div>
             </div>
 
-            {/* 歡迎與資產卡片 */}
             <div className="bg-gradient-to-br from-indigo-600 to-purple-700 rounded-[2rem] p-6 shadow-lg text-white relative overflow-hidden">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full -mr-10 -mt-10 blur-xl"></div>
                 <div className="flex items-center gap-4 mb-5">
-                    <div className="text-4xl bg-white/20 w-16 h-16 rounded-2xl flex items-center justify-center backdrop-blur-sm shadow-inner overflow-hidden">
-                        {renderAvatar(currentUser.avatar)}
-                    </div>
-                    <div>
-                        <h2 className="text-2xl font-black tracking-tight">早安, {currentUser.name.split(' ')[0]}</h2>
-                        <p className="text-sm font-bold opacity-80">{isAdmin ? '家庭管理員，準備好今天的安排了嗎？' : '準備好完成今天的任務了嗎？'}</p>
-                    </div>
+                    <div className="text-4xl bg-white/20 w-16 h-16 rounded-2xl flex items-center justify-center backdrop-blur-sm shadow-inner overflow-hidden">{renderAvatar(currentUser.avatar)}</div>
+                    <div><h2 className="text-2xl font-black tracking-tight">早安, {currentUser.name.split(' ')[0]}</h2><p className="text-sm font-bold opacity-80">{isAdmin ? '家庭管理員，準備好今天的安排了嗎？' : '準備好完成今天的任務了嗎？'}</p></div>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {/* C-Dollar 儲備 */}
                     {(currentUser.permissions || []).includes('cdollar') && (
                         <div onClick={() => setActiveTab('cdollar')} className="bg-white/10 rounded-2xl p-4 backdrop-blur-md flex flex-col gap-2 cursor-pointer hover:bg-white/20 transition">
-                            <div className="flex justify-between items-center">
-                                <p className="text-[10px] font-black uppercase tracking-widest opacity-90 flex items-center gap-1"><Award size={12}/> {isAdmin ? '全家金融儲備看板' : 'C-Dollar 總儲備'}</p>
-                                {!isAdmin && <p className="text-[9px] opacity-80">{convertToHKD(totalAssets)}</p>}
-                            </div>
+                            <div className="flex justify-between items-center"><p className="text-[10px] font-black uppercase tracking-widest opacity-90 flex items-center gap-1"><Award size={12}/> {isAdmin ? '全家金融儲備看板' : 'C-Dollar 總儲備'}</p>{!isAdmin && <p className="text-[9px] opacity-80">{convertToHKD(totalAssets)}</p>}</div>
                             <p className="text-2xl font-black italic tracking-tighter drop-shadow-md">{isAdmin ? '管理模式' : formatCDollar(totalAssets)}</p>
                         </div>
                     )}
-                    
-                    {/* 個人開支 */}
                     {(currentUser.permissions || []).includes('expenses') && !isAdmin && (
                         <div onClick={() => setActiveTab('expenses')} className="bg-orange-500/20 rounded-2xl p-4 backdrop-blur-md flex flex-col gap-2 cursor-pointer hover:bg-orange-500/30 transition border border-orange-400/30">
-                            <div className="flex justify-between items-center">
-                                <p className="text-[10px] font-black uppercase tracking-widest opacity-90 flex items-center gap-1 text-orange-100"><CreditCard size={12}/> 本月個人花費</p>
-                                <p className="text-[9px] opacity-90 text-orange-200">已付 {formatMoney(myPaidAmount)}</p>
-                            </div>
+                            <div className="flex justify-between items-center"><p className="text-[10px] font-black uppercase tracking-widest opacity-90 flex items-center gap-1 text-orange-100"><CreditCard size={12}/> 本月個人花費</p><p className="text-[9px] opacity-90 text-orange-200">已付 {formatMoney(myPaidAmount)}</p></div>
                             <p className="text-2xl font-black italic tracking-tighter drop-shadow-md text-orange-50">{formatMoney(myTotalBudget)}</p>
                         </div>
                     )}
@@ -212,46 +177,21 @@ const DashboardView = ({ currentUser, members, wallets, events, trips, expenses,
                 <div className="space-y-3">
                     {upcomingEvents.length > 0 ? upcomingEvents.map(ev => (
                         <div key={ev.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-                            <div className="w-14 h-14 bg-indigo-50 rounded-xl flex flex-col items-center justify-center text-indigo-600 shrink-0">
-                                <span className="text-[10px] font-bold uppercase tracking-widest">{ev.date.split('-')[1]}月</span>
-                                <span className="text-xl font-black">{ev.date.split('-')[2]}</span>
-                            </div>
+                            <div className="w-14 h-14 bg-indigo-50 rounded-xl flex flex-col items-center justify-center text-indigo-600 shrink-0"><span className="text-[10px] font-bold uppercase tracking-widest">{ev.date.split('-')[1]}月</span><span className="text-xl font-black">{ev.date.split('-')[2]}</span></div>
                             <div className="flex-1 min-w-0">
                                 <p className="font-black text-slate-800 text-lg truncate">{ev.title}</p>
                                 <p className="text-xs font-bold text-slate-400 flex items-center gap-1"><Clock size={12}/> {ev.startTime} {ev.notes ? `· ${ev.notes}` : ''}</p>
-                                <div className="flex items-center -space-x-1.5 mt-2">
-                                    {ev.participants?.map(pId => {
-                                        const mem = members.find(m => m.id === pId);
-                                        return mem ? <div key={pId} className="w-6 h-6 rounded-full overflow-hidden bg-slate-50 border-2 border-white text-[10px] flex items-center justify-center shadow-sm relative z-10" title={mem.name}>{renderAvatar(mem.avatar)}</div> : null;
-                                    })}
-                                </div>
+                                <div className="flex items-center -space-x-1.5 mt-2">{ev.participants?.map(pId => { const mem = members.find(m => m.id === pId); return mem ? <div key={pId} className="w-6 h-6 rounded-full overflow-hidden bg-slate-50 border-2 border-white text-[10px] flex items-center justify-center shadow-sm relative z-10" title={mem.name}>{renderAvatar(mem.avatar)}</div> : null; })}</div>
                             </div>
                         </div>
                     )) : <div className="text-center text-slate-400 font-bold py-8 bg-white rounded-2xl border border-slate-100 italic">近期沒有與您相關的安排</div>}
                 </div>
             </div>
-
-            {(currentUser.permissions || []).includes('travel') && activeTrips.length > 0 && (
-                <div>
-                    <h3 className="font-black text-lg text-slate-800 mb-3 px-2 flex items-center gap-2"><Plane size={18} className="text-indigo-500"/> 即將出發旅行</h3>
-                    {activeTrips.map(trip => (
-                        <div key={trip.id} onClick={() => setActiveTab('travel')} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 cursor-pointer hover:border-indigo-200 transition">
-                            <div className="flex items-center gap-3 mb-2"><MapPin size={22} className="text-indigo-500" /><h4 className="font-black text-xl text-slate-800 truncate">{trip.destination}</h4></div>
-                            <p className="text-sm font-bold text-slate-400 mb-4 ml-8">{trip.startDate} - {trip.endDate}</p>
-                            <div className="flex items-center gap-3">
-                                <div className="flex-1 bg-slate-100 rounded-full h-3"><div className="bg-green-500 h-3 rounded-full transition-all duration-500" style={{width:`${calculatePackingProgress(trip.packingList)}%`}}></div></div>
-                                <span className="text-xs font-black text-green-600 bg-green-50 px-2 py-1 rounded-md">行李 {calculatePackingProgress(trip.packingList)}%</span>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            )}
         </div>
     );
 };
 
-// 財商核心：C-Dollar 視圖
-const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
+const CDollarView = ({ currentUser, members, wallets, db }) => {
     const [transactions, setTransactions] = useState([]);
     const [requests, setRequests] = useState([]);
     const [tasks, setTasks] = useState([]);
@@ -266,25 +206,21 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
     const isAdmin = currentUser.role === 'admin';
 
     useEffect(() => {
-        const unsubT = onSnapshot(query(collection(db, 'artifacts', appId, 'users', userId, 'cdollar_tx'), orderBy('date', 'desc'), limit(50)), snap => setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-        const unsubReq = onSnapshot(query(collection(db, 'artifacts', appId, 'users', userId, 'cdollar_requests'), orderBy('createdAt', 'desc')), snap => setRequests(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-        const unsubTasks = onSnapshot(collection(db, 'artifacts', appId, 'users', userId, 'cdollar_tasks'), snap => { if (snap.empty && isAdmin) SEED_TASKS.forEach(t => addDoc(collection(db, 'artifacts', appId, 'users', userId, 'cdollar_tasks'), t)); else setTasks(snap.docs.map(d => ({ id: d.id, ...d.data() }))); });
-        const unsubShop = onSnapshot(collection(db, 'artifacts', appId, 'users', userId, 'cdollar_shop'), snap => { if (snap.empty && isAdmin) SEED_SHOP_ITEMS.forEach(s => addDoc(collection(db, 'artifacts', appId, 'users', userId, 'cdollar_shop'), s)); else setShopItems(snap.docs.map(d => ({ id: d.id, ...d.data() }))); });
-        const unsubInvest = onSnapshot(collection(db, 'artifacts', appId, 'users', userId, 'cdollar_invest_products'), snap => { if (snap.empty && isAdmin) SEED_INVESTMENTS.forEach(i => addDoc(collection(db, 'artifacts', appId, 'users', userId, 'cdollar_invest_products'), i)); else setInvestProducts(snap.docs.map(d => ({ id: d.id, ...d.data() }))); });
-        const unsubPortfolio = onSnapshot(collection(db, 'artifacts', appId, 'users', userId, 'cdollar_portfolio'), snap => setPortfolio(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+        const unsubT = onSnapshot(query(getCol('cdollar_tx'), orderBy('date', 'desc'), limit(50)), snap => setTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+        const unsubReq = onSnapshot(query(getCol('cdollar_requests'), orderBy('createdAt', 'desc')), snap => setRequests(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+        const unsubTasks = onSnapshot(getCol('cdollar_tasks'), snap => { if (snap.empty && isAdmin) SEED_TASKS.forEach(t => addDoc(getCol('cdollar_tasks'), t)); else setTasks(snap.docs.map(d => ({ id: d.id, ...d.data() }))); });
+        const unsubShop = onSnapshot(getCol('cdollar_shop'), snap => { if (snap.empty && isAdmin) SEED_SHOP_ITEMS.forEach(s => addDoc(getCol('cdollar_shop'), s)); else setShopItems(snap.docs.map(d => ({ id: d.id, ...d.data() }))); });
+        const unsubInvest = onSnapshot(getCol('cdollar_invest_products'), snap => { if (snap.empty && isAdmin) SEED_INVESTMENTS.forEach(i => addDoc(getCol('cdollar_invest_products'), i)); else setInvestProducts(snap.docs.map(d => ({ id: d.id, ...d.data() }))); });
+        const unsubPortfolio = onSnapshot(getCol('cdollar_portfolio'), snap => setPortfolio(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
         
         return () => { unsubT(); unsubReq(); unsubTasks(); unsubShop(); unsubInvest(); unsubPortfolio(); };
-    }, [userId, isAdmin]);
-
-    useEffect(() => {
-        if (isAdmin) setAdminBankInputs(wallets);
-    }, [wallets, isAdmin]);
+    }, [isAdmin]);
 
     const handleTransaction = async (memberId, amount, reason, type = 'general') => {
         const targetWallet = wallets[memberId] || { balance: 0, savings: 0, invested: 0 };
         const newBalance = Math.max(0, targetWallet.balance + amount);
-        await addDoc(collection(db, 'artifacts', appId, 'users', userId, 'cdollar_tx'), { memberId, amount, reason, type, date: new Date().toISOString(), createdBy: currentUser.name });
-        await setDoc(doc(db, 'artifacts', appId, 'users', userId, 'cdollar_wallets', memberId), { balance: newBalance, savings: targetWallet.savings, invested: targetWallet.invested || 0, memberId }, { merge: true });
+        await addDoc(getCol('cdollar_tx'), { memberId, amount, reason, type, date: new Date().toISOString(), createdBy: currentUser.name });
+        await setDoc(getDoc('cdollar_wallets', memberId), { balance: newBalance, savings: targetWallet.savings, invested: targetWallet.invested || 0, memberId }, { merge: true });
     };
 
     const handleBankTransfer = async (type) => {
@@ -299,12 +235,8 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
             if (amt > myWallet.savings) return alert('銀行存款不足以提款');
             newBalance += amt; newSavings -= amt;
         }
-        await setDoc(doc(db, 'artifacts', appId, 'users', userId, 'cdollar_wallets', currentUser.id), { balance: newBalance, savings: newSavings, invested: myWallet.invested || 0, memberId: currentUser.id }, { merge: true });
-        
-        await addDoc(collection(db, 'artifacts', appId, 'users', userId, 'cdollar_tx'), {
-            memberId: currentUser.id, amount: type === 'deposit' ? -amt : amt, reason: type === 'deposit' ? '存入銀行' : '銀行提款', type: 'bank', date: new Date().toISOString(), createdBy: currentUser.name
-        });
-
+        await setDoc(getDoc('cdollar_wallets', currentUser.id), { balance: newBalance, savings: newSavings, invested: myWallet.invested || 0, memberId: currentUser.id }, { merge: true });
+        await addDoc(getCol('cdollar_tx'), { memberId: currentUser.id, amount: type === 'deposit' ? -amt : amt, reason: type === 'deposit' ? '存入銀行' : '銀行提款', type: 'bank', date: new Date().toISOString(), createdBy: currentUser.name });
         setBankAmount(''); alert(`成功${type === 'deposit' ? '存入' : '提出'} ${formatCDollar(amt)}`);
     };
 
@@ -317,21 +249,20 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
         const edits = adminBankInputs[memberId] || {};
         const finalBalance = edits.balance !== undefined ? edits.balance : currentWallet.balance;
         const finalSavings = edits.savings !== undefined ? edits.savings : currentWallet.savings;
-
-        await setDoc(doc(db, 'artifacts', appId, 'users', userId, 'cdollar_wallets', memberId), { balance: finalBalance, savings: finalSavings, memberId }, { merge: true });
+        await setDoc(getDoc('cdollar_wallets', memberId), { balance: finalBalance, savings: finalSavings, memberId }, { merge: true });
         setAdminBankInputs(prev => { const next = { ...prev }; delete next[memberId]; return next; });
         alert('修改成功！');
     };
 
     const handleAdminDistributeInterest = async (rate) => {
-        if (!confirm(`確定按 ${rate}% 派發利息給所有有存款的成員嗎？`)) return;
+        if (!confirm(`確定按 ${rate}% 派發利息嗎？`)) return;
         for (const memberId of Object.keys(wallets)) {
             const w = wallets[memberId];
             if (w.savings > 0) {
                 const interest = Math.round(w.savings * (rate / 100));
                 if (interest > 0) {
                     await handleTransaction(memberId, interest, `活期存款利息 (+${rate}%)`, 'interest');
-                    await setDoc(doc(db, 'artifacts', appId, 'users', userId, 'cdollar_wallets', memberId), { ...w, savings: w.savings + interest, memberId }, { merge: true });
+                    await setDoc(getDoc('cdollar_wallets', memberId), { ...w, savings: w.savings + interest, memberId }, { merge: true });
                 }
             }
         }
@@ -344,10 +275,9 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
         const myWallet = wallets[currentUser.id] || { balance: 0, savings: 0, invested: 0 };
         if (amt > myWallet.balance) return alert('可用餘額不足以投資此產品！');
         
-        await setDoc(doc(db, 'artifacts', appId, 'users', userId, 'cdollar_wallets', currentUser.id), { balance: myWallet.balance - amt, savings: myWallet.savings, invested: (myWallet.invested || 0) + amt, memberId: currentUser.id }, { merge: true });
-        await addDoc(collection(db, 'artifacts', appId, 'users', userId, 'cdollar_tx'), { memberId: currentUser.id, amount: -amt, reason: `買入基金: ${product.title}`, type: 'invest', date: new Date().toISOString(), createdBy: currentUser.name });
-        await addDoc(collection(db, 'artifacts', appId, 'users', userId, 'cdollar_portfolio'), { memberId: currentUser.id, productId: product.id, title: product.title, amount: amt, rate: product.rate, purchaseDate: new Date().toISOString(), status: 'active' });
-        
+        await setDoc(getDoc('cdollar_wallets', currentUser.id), { balance: myWallet.balance - amt, savings: myWallet.savings, invested: (myWallet.invested || 0) + amt, memberId: currentUser.id }, { merge: true });
+        await addDoc(getCol('cdollar_tx'), { memberId: currentUser.id, amount: -amt, reason: `買入基金: ${product.title}`, type: 'invest', date: new Date().toISOString(), createdBy: currentUser.name });
+        await addDoc(getCol('cdollar_portfolio'), { memberId: currentUser.id, productId: product.id, title: product.title, amount: amt, rate: product.rate, purchaseDate: new Date().toISOString(), status: 'active' });
         setInvestAmount(''); alert(`成功買入 ${formatCDollar(amt)} 的 ${product.title}`);
     };
     
@@ -357,32 +287,32 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
         const newBalance = myWallet.balance + portfolioItem.amount;
         const newInvested = Math.max(0, (myWallet.invested || 0) - portfolioItem.amount);
 
-        await setDoc(doc(db, 'artifacts', appId, 'users', userId, 'cdollar_wallets', currentUser.id), { balance: newBalance, savings: myWallet.savings, invested: newInvested, memberId: currentUser.id }, { merge: true });
-        await addDoc(collection(db, 'artifacts', appId, 'users', userId, 'cdollar_tx'), { memberId: currentUser.id, amount: portfolioItem.amount, reason: `賣出基金: ${portfolioItem.title}`, type: 'invest', date: new Date().toISOString(), createdBy: currentUser.name });
-        await deleteDoc(doc(db, 'artifacts', appId, 'users', userId, 'cdollar_portfolio', portfolioItem.id));
+        await setDoc(getDoc('cdollar_wallets', currentUser.id), { balance: newBalance, savings: myWallet.savings, invested: newInvested, memberId: currentUser.id }, { merge: true });
+        await addDoc(getCol('cdollar_tx'), { memberId: currentUser.id, amount: portfolioItem.amount, reason: `賣出基金: ${portfolioItem.title}`, type: 'invest', date: new Date().toISOString(), createdBy: currentUser.name });
+        await deleteDoc(getDoc('cdollar_portfolio', portfolioItem.id));
         alert('賣出成功！資金已退回餘額。');
     };
 
     const handleAdminAdd = async (col) => {
         const title = prompt(`請輸入名稱:`); if (!title) return;
-        const val = prompt(`請輸入數值 (例如獎勵額/花費額/回報率):`); if (!val || isNaN(val)) return alert('數值無效');
-        if (col === 'tasks') await addDoc(collection(db, 'artifacts', appId, 'users', userId, 'cdollar_tasks'), { title, reward: Number(val), type: 'custom' });
-        if (col === 'shop') await addDoc(collection(db, 'artifacts', appId, 'users', userId, 'cdollar_shop'), { title, cost: Number(val), icon: '✨' });
-        if (col === 'invest') await addDoc(collection(db, 'artifacts', appId, 'users', userId, 'cdollar_invest_products'), { title, rate: Number(val), cycle: 30, risk: '中', icon: '📊' });
+        const val = prompt(`請輸入數值:`); if (!val || isNaN(val)) return alert('數值無效');
+        if (col === 'tasks') await addDoc(getCol('cdollar_tasks'), { title, reward: Number(val), type: 'custom' });
+        if (col === 'shop') await addDoc(getCol('cdollar_shop'), { title, cost: Number(val), icon: '✨' });
+        if (col === 'invest') await addDoc(getCol('cdollar_invest_products'), { title, rate: Number(val), cycle: 30, risk: '中', icon: '📊' });
     };
     
     const handleAdminDelete = async (col, id) => { 
-        if(confirm('確定刪除？此動作無法復原。')) await deleteDoc(doc(db, 'artifacts', appId, 'users', userId, `cdollar_${col}`, id)); 
+        if(confirm('確定刪除？此動作無法復原。')) await deleteDoc(getDoc(`cdollar_${col}`, id)); 
     };
 
     const submitRequest = async (item, type, amount) => {
         if (type === 'shop' && (wallets[currentUser.id]?.balance || 0) < amount) return alert('可用餘額不足！');
-        await addDoc(collection(db, 'artifacts', appId, 'users', userId, 'cdollar_requests'), { memberId: currentUser.id, memberName: currentUser.name.split(' ')[0], type, title: item.title, amount: type === 'shop' ? -amount : amount, status: 'pending', createdAt: new Date().toISOString() });
+        await addDoc(getCol('cdollar_requests'), { memberId: currentUser.id, memberName: currentUser.name.split(' ')[0], type, title: item.title, amount: type === 'shop' ? -amount : amount, status: 'pending', createdAt: new Date().toISOString() });
         alert('已發送申請，請等待父母審批！');
     };
     const handleRequestApproval = async (req, isApprove) => {
         if (isApprove) await handleTransaction(req.memberId, req.amount, `${req.type === 'shop' ? '兌換' : '完成'}: ${req.title}`, req.type);
-        await deleteDoc(doc(db, 'artifacts', appId, 'users', userId, 'cdollar_requests', req.id));
+        await deleteDoc(getDoc('cdollar_requests', req.id));
     };
 
     const myWallet = wallets[currentUser.id] || { balance: 0, savings: 0, invested: 0 };
@@ -395,10 +325,7 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
             <div className="p-4 bg-gradient-to-br from-indigo-600 to-purple-700 rounded-b-[2rem] shadow-lg text-white mb-4 relative overflow-hidden shrink-0">
                 <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full -mr-10 -mt-10 blur-xl"></div>
                 <div className="flex justify-between items-center mb-6 pt-2">
-                    <div>
-                        <h2 className="text-2xl font-black italic">Family FQ Center</h2>
-                        <p className="text-[10px] font-bold opacity-80 flex items-center gap-1 mt-1"><RefreshCw size={10}/> 實時掛鉤 CNY 匯率: 1 C$ = {EXCHANGE_RATE_CNY_HKD} HKD</p>
-                    </div>
+                    <div><h2 className="text-2xl font-black italic">Family FQ Center</h2><p className="text-[10px] font-bold opacity-80 flex items-center gap-1 mt-1"><RefreshCw size={10}/> 實時掛鉤 CNY 匯率: 1 C$ = {EXCHANGE_RATE_CNY_HKD} HKD</p></div>
                     <Award size={28} className="text-yellow-300 drop-shadow-md" />
                 </div>
                 
@@ -406,10 +333,7 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                     <div className="grid grid-cols-2 gap-3">
                         {members.filter(m => m.role !== 'admin').map(m => (
                             <div key={m.id} className="bg-white/10 p-3 rounded-xl backdrop-blur-md border border-white/10">
-                                <div className="flex items-center gap-2 mb-1">
-                                    <div className="w-5 h-5 rounded-full overflow-hidden bg-white/20 text-xs flex justify-center items-center">{renderAvatar(m.avatar)}</div>
-                                    <p className="text-[10px] uppercase font-bold opacity-80">{m.name.split(' ')[0]}</p>
-                                </div>
+                                <p className="text-[10px] uppercase font-bold opacity-80 mb-1 flex items-center gap-1"><span className="w-4 h-4 rounded-full overflow-hidden inline-block">{renderAvatar(m.avatar)}</span> {m.name.split(' ')[0]}</p>
                                 <p className="text-xl font-black italic">{formatCDollar(wallets[m.id]?.balance)}</p>
                                 <p className="text-[10px] opacity-60 mt-1 font-bold">存款: {formatCDollar(wallets[m.id]?.savings)} | 投資: {formatCDollar(wallets[m.id]?.invested)}</p>
                             </div>
@@ -438,25 +362,24 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
             <div className="flex-1 overflow-y-auto px-4 space-y-4 pb-32">
                 {activeSubTab === 'wallet' && (
                     <div className="space-y-6">
-                        {/* 審批區域 */}
-                        <div className="bg-orange-50 border border-orange-100 p-4 rounded-2xl">
-                            <h4 className="font-black text-orange-800 mb-3 flex items-center gap-2"><Bell size={16}/> {isAdmin ? '待處理申請 (家長審批)' : '我的申請進度'}</h4>
-                            <div className="space-y-3">
-                                {pendingRequests.length > 0 ? pendingRequests.map(req => (
-                                    <div key={req.id} className="bg-white p-3 rounded-xl shadow-sm flex justify-between items-center border border-orange-100/50">
-                                        <div>
-                                            <p className="font-bold text-slate-800 text-sm">{isAdmin && <span className="text-indigo-600 mr-1">{req.memberName}</span>}{req.title}</p>
-                                            <p className={`font-black text-xs italic ${req.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>{req.amount > 0 ? '+' : ''}{formatCDollar(Math.abs(req.amount))}</p>
+                        {pendingRequests.length > 0 && (
+                            <div className="bg-orange-50 border border-orange-100 p-4 rounded-2xl">
+                                <h4 className="font-black text-orange-800 mb-3 flex items-center gap-2"><Bell size={16}/> {isAdmin ? '待處理申請 (家長審批)' : '我的申請進度'}</h4>
+                                <div className="space-y-3">
+                                    {pendingRequests.map(req => (
+                                        <div key={req.id} className="bg-white p-3 rounded-xl shadow-sm flex justify-between items-center border border-orange-100/50">
+                                            <div>
+                                                <p className="font-bold text-slate-800 text-sm">{isAdmin && <span className="text-indigo-600 mr-1">{req.memberName}</span>}{req.title}</p>
+                                                <p className={`font-black text-xs italic ${req.amount > 0 ? 'text-green-600' : 'text-red-600'}`}>{req.amount > 0 ? '+' : ''}{formatCDollar(Math.abs(req.amount))}</p>
+                                            </div>
+                                            {isAdmin ? (
+                                                <div className="flex gap-2"><button onClick={() => handleRequestApproval(req, false)} className="px-3 py-1.5 bg-slate-100 text-slate-500 rounded-lg text-xs font-black hover:bg-red-50 hover:text-red-500">拒絕</button><button onClick={() => handleRequestApproval(req, true)} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-black shadow-md active:scale-95">批准</button></div>
+                                            ) : <span className="text-[10px] font-black text-orange-500 bg-orange-100 px-2 py-1 rounded">等待父母審核</span>}
                                         </div>
-                                        {isAdmin ? (
-                                            <div className="flex gap-2"><button onClick={() => handleRequestApproval(req, false)} className="px-3 py-1.5 bg-slate-100 text-slate-500 rounded-lg text-xs font-black hover:bg-red-50 hover:text-red-500">拒絕</button><button onClick={() => handleRequestApproval(req, true)} className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-black shadow-md active:scale-95">批准</button></div>
-                                        ) : <span className="text-[10px] font-black text-orange-500 bg-orange-100 px-2 py-1 rounded">等待父母審核</span>}
-                                    </div>
-                                )) : <p className="text-xs font-bold text-orange-400 italic">目前沒有待處理的申請</p>}
+                                    ))}
+                                </div>
                             </div>
-                        </div>
-
-                        {/* 交易紀錄 */}
+                        )}
                         <div>
                             <h4 className="font-black text-slate-800 mb-3">資金明細紀錄</h4>
                             <div className="space-y-3">
@@ -477,7 +400,6 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                     </div>
                 )}
 
-                {/* 任務大廳 */}
                 {activeSubTab === 'tasks' && (
                     <div className="space-y-3">
                         {isAdmin && <button onClick={() => handleAdminAdd('tasks')} className="w-full bg-indigo-50 text-indigo-600 border border-indigo-100 py-3 rounded-2xl font-black flex justify-center items-center gap-2 mb-4"><Plus size={18}/> 發佈新任務</button>}
@@ -490,7 +412,6 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                     </div>
                 )}
 
-                {/* 兌換商城 */}
                 {activeSubTab === 'shop' && (
                     <div className="space-y-4">
                         {isAdmin && <button onClick={() => handleAdminAdd('shop')} className="w-full bg-indigo-50 text-indigo-600 border border-indigo-100 py-3 rounded-2xl font-black flex justify-center items-center gap-2"><Plus size={18}/> 上架新產品</button>}
@@ -506,7 +427,6 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                     </div>
                 )}
 
-                {/* 投資理財 */}
                 {activeSubTab === 'invest' && (
                     <div className="space-y-4">
                         {isAdmin && <button onClick={() => handleAdminAdd('invest')} className="w-full bg-indigo-50 text-indigo-600 border border-indigo-100 py-3 rounded-2xl font-black flex justify-center items-center gap-2 mb-4"><Plus size={18}/> 發行新金融產品</button>}
@@ -545,7 +465,6 @@ const CDollarView = ({ currentUser, members, wallets, db, userId }) => {
                     </div>
                 )}
 
-                {/* 央行與存款 */}
                 {activeSubTab === 'bank' && (
                     <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm text-center">
                         <div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center mx-auto mb-4"><Landmark size={40} className="text-indigo-500" /></div>
@@ -809,20 +728,20 @@ export default function App() {
 
   useEffect(() => {
     if (!user) return;
-    const unsubMembers = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'members'), (snap) => {
+    const unsubMembers = onSnapshot(getCol('members'), (snap) => {
         const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        if (data.length === 0) DEFAULT_MEMBERS_SEED.forEach(m => addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'members'), { ...m, createdAt: serverTimestamp() }));
+        if (data.length === 0) DEFAULT_MEMBERS_SEED.forEach(m => addDoc(getCol('members'), { ...m, createdAt: serverTimestamp() }));
         else setMembers(data);
         setLoading(false);
     });
-    const unsubEvents = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'events'), snap => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const unsubExpenses = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses'), snap => setExpenses(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const unsubTrips = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'trips'), snap => setTrips(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
-    const unsubWallets = onSnapshot(collection(db, 'artifacts', appId, 'users', user.uid, 'cdollar_wallets'), (snap) => {
+    const unsubEvents = onSnapshot(getCol('events'), snap => setEvents(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubExpenses = onSnapshot(getCol('expenses'), snap => setExpenses(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubTrips = onSnapshot(getCol('trips'), snap => setTrips(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubWallets = onSnapshot(getCol('cdollar_wallets'), (snap) => {
         const d = {}; snap.docs.forEach(doc => d[doc.id] = { balance: doc.data().balance || 0, savings: doc.data().savings || 0, invested: doc.data().invested || 0 });
         setWallets(d);
     });
-    const unsubSettings = onSnapshot(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'expenses'), docSnap => {
+    const unsubSettings = onSnapshot(getDoc('settings', 'expenses'), docSnap => {
         if (docSnap.exists() && docSnap.data().categories) setExpenseCategories(docSnap.data().categories);
     });
 
@@ -835,26 +754,39 @@ export default function App() {
       } else alert('密碼錯誤！');
   };
 
-  const handleAddMember = async (newMember) => { await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'members'), { ...newMember, password: '888888', createdAt: serverTimestamp() }); setShowAddMemberModal(false); };
-  const handleChangePassword = async (newPassword) => { if (!targetMemberId || !newPassword) return; await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'members', targetMemberId), { password: newPassword }); setShowChangePasswordModal(false); };
-  const savePermissions = async (memberId, newPerms) => { await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'members', memberId), { permissions: newPerms }); setShowEditPermissionsModal(false); };
+  // Avatar Upload Logic in Settings
+  const handleUpdateAvatar = async (e) => {
+      const file = e.target.files[0];
+      if (file) {
+          if (file.size > 100 * 1024) return alert("圖片過大，請選擇小於 100KB 的圖片");
+          const reader = new FileReader();
+          reader.onloadend = async () => {
+              await updateDoc(getDoc('members', currentUserRole.id), { avatar: reader.result });
+              setCurrentUserRole(prev => ({ ...prev, avatar: reader.result })); // Optimistic UI update
+          };
+          reader.readAsDataURL(file);
+      }
+  };
 
-  const saveEvent = async (data) => { const payload = { ...data, updatedAt: serverTimestamp() }; if (data.id) await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'events', data.id), payload); else await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'events'), { ...payload, createdAt: serverTimestamp() }); setShowEventModal(false); };
-  
+  const handleAddMember = async (newMember) => { await addDoc(getCol('members'), { ...newMember, password: '888888', createdAt: serverTimestamp() }); setShowAddMemberModal(false); };
+  const handleChangePassword = async (newPassword) => { if (!targetMemberId || !newPassword) return; await updateDoc(getDoc('members', targetMemberId), { password: newPassword }); setShowChangePasswordModal(false); };
+  const savePermissions = async (memberId, newPerms) => { await updateDoc(getDoc('members', memberId), { permissions: newPerms }); setShowEditPermissionsModal(false); };
+
+  const saveEvent = async (data) => { const payload = { ...data, updatedAt: serverTimestamp() }; if (data.id) await updateDoc(getDoc('events', data.id), payload); else await addDoc(getCol('events'), { ...payload, createdAt: serverTimestamp() }); setShowEventModal(false); };
   const saveExpense = async (data) => { 
       const payload = { ...data, amount: Number(data.amount) || 0, updatedAt: serverTimestamp() };
-      if (data.id) await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'expenses', data.id), payload); 
-      else await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'expenses'), { ...payload, createdAt: serverTimestamp(), paidPeriods: [] }); 
+      if (data.id) await updateDoc(getDoc('expenses', data.id), payload); 
+      else await addDoc(getCol('expenses'), { ...payload, createdAt: serverTimestamp(), paidPeriods: [] }); 
       setShowExpenseModal(false); 
   };
   
-  const deleteItem = async (col, id) => { if (confirm('確定刪除？此動作無法復原。')) { await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, col, id)); setShowEventModal(false); setShowExpenseModal(false); } };
+  const deleteItem = async (col, id) => { if (confirm('確定刪除？此動作無法復原。')) { await deleteDoc(getDoc(col, id)); setShowEventModal(false); setShowExpenseModal(false); } };
   const finishTripWizard = (data) => {
       const createItem = (name) => ({ name, packed: false });
       const shared = [createItem('Wifi 蛋/SIM卡'), createItem('急救包'), createItem('充電器')];
       const individual = {}; data.participants.forEach(pid => { individual[pid] = [createItem('護照'), createItem('手機'), createItem('衣物')]; });
-      addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'trips'), { ...data, packingList: { shared, individual }, createdAt: serverTimestamp() });
-      addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'events'), { title: `✈️ ${data.destination}`, date: data.startDate, startTime: '00:00', endTime: '23:59', type: 'travel', participants: data.participants, notes: `至 ${data.endDate}` });
+      addDoc(getCol('trips'), { ...data, packingList: { shared, individual }, createdAt: serverTimestamp() });
+      addDoc(getCol('events'), { title: `✈️ ${data.destination}`, date: data.startDate, startTime: '00:00', endTime: '23:59', type: 'travel', participants: data.participants, notes: `至 ${data.endDate}` });
       setShowTripWizard(false);
   };
   
@@ -863,20 +795,20 @@ export default function App() {
     const paidPeriods = expense.paidPeriods || [];
     const isPaid = paidPeriods.includes(periodKey);
     const newPaidPeriods = isPaid ? paidPeriods.filter(m => m !== periodKey) : [...paidPeriods, periodKey];
-    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'expenses', expenseId), { paidPeriods: newPaidPeriods });
+    await updateDoc(getDoc('expenses', expenseId), { paidPeriods: newPaidPeriods });
   };
 
   const addExpCat = async () => {
       const newCat = prompt('輸入新的開支類型名稱：');
       if (newCat && !expenseCategories.includes(newCat)) {
           const updated = [...expenseCategories, newCat];
-          await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'expenses'), { categories: updated }, { merge: true });
+          await setDoc(getDoc('settings', 'expenses'), { categories: updated }, { merge: true });
       }
   };
   const deleteExpCat = async (catName) => {
       if (confirm(`確定刪除分類「${catName}」？`)) {
           const updated = expenseCategories.filter(c => c !== catName);
-          await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'expenses'), { categories: updated }, { merge: true });
+          await setDoc(getDoc('settings', 'expenses'), { categories: updated }, { merge: true });
       }
   };
 
@@ -936,8 +868,7 @@ export default function App() {
              </div>
              {dayEvents.length === 0 ? (
                  <div className="text-center text-slate-300 py-10 flex flex-col items-center">
-                     <div className="w-20 h-20 bg-slate-100 rounded-[2rem] flex items-center justify-center mb-4"><CalendarIcon size={32}/></div>
-                     <p className="font-bold italic">今天沒有安排事項</p>
+                     <div className="w-20 h-20 bg-slate-100 rounded-[2rem] flex items-center justify-center mb-4"><CalendarIcon size={32}/></div><p className="font-bold italic">今天沒有安排事項</p>
                  </div>
              ) : (
                  <div className="space-y-4">
@@ -981,30 +912,11 @@ export default function App() {
       const dayEvents = events.filter(e => e.date === dateStr);
       days.push(
         <div key={d} onClick={() => { setCurrentDate(dateObj); setCalendarView('day'); }} className={`h-28 border-r border-b p-1.5 relative hover:bg-indigo-50/50 transition-colors cursor-pointer ${isToday ? 'bg-indigo-50/30' : 'bg-white'}`}>
-           <div className="flex justify-between items-start">
-               <span className={`text-sm font-black w-6 h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-700'}`}>{d}</span>
-               <div className="flex flex-col items-end">
-                   <span className="text-[9px] font-bold text-slate-400">{lunar.dayText}</span>
-                   {lunar.auspicious && <span className="text-[8px] font-bold text-orange-500 scale-90 origin-right border border-orange-200 rounded px-1 bg-orange-50 mt-0.5 whitespace-nowrap">{lunar.auspicious}</span>}
-                   {holiday && <span className="text-[9px] font-black text-red-500 mt-0.5">{holiday}</span>}
-               </div>
-           </div>
-           <div className="mt-1 flex flex-col gap-1 overflow-hidden h-[calc(100%-28px)]">
-             {dayEvents.slice(0, 3).map(ev => { 
-                 const cat = categories.find(c => c.id === ev.type) || categories[0]; 
-                 return (
-                    <div key={ev.id} onMouseEnter={(e) => setHoveredEvent({ event: ev, x: e.clientX, y: e.clientY })} onMouseLeave={() => setHoveredEvent(null)} onClick={(e) => { e.stopPropagation(); setEventFormData(ev); setShowEventModal(true); }} className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md truncate border flex items-center gap-1 ${cat.color}`}>
-                        <div className="flex -space-x-1 shrink-0">
-                            {ev.participants?.slice(0,3).map(p => {
-                                const mem = members.find(m=>m.id===p);
-                                return mem ? <span key={p} className="w-3 h-3 rounded-full overflow-hidden inline-block text-[6px] drop-shadow-sm z-10 relative">{renderAvatar(mem.avatar)}</span> : null;
-                            })}
-                        </div>
-                        <span className="truncate">{ev.title}</span>
-                    </div>
-                 ); 
-             })}
-           </div>
+           <div className="flex justify-between items-start"><span className={`text-sm font-black w-6 h-6 flex items-center justify-center rounded-full ${isToday ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-700'}`}>{d}</span><div className="flex flex-col items-end"><span className="text-[9px] font-bold text-slate-400">{lunar.dayText}</span>{lunar.auspicious && <span className="text-[8px] font-bold text-orange-500 scale-90 origin-right border border-orange-200 rounded px-1 bg-orange-50 mt-0.5 whitespace-nowrap">{lunar.auspicious}</span>}{holiday && <span className="text-[9px] font-black text-red-500 mt-0.5">{holiday}</span>}</div></div>
+           <div className="mt-1 flex flex-col gap-1 overflow-hidden h-[calc(100%-28px)]">{dayEvents.slice(0, 3).map(ev => { 
+               const cat = categories.find(c => c.id === ev.type) || categories[0]; 
+               return (<div key={ev.id} onMouseEnter={(e) => setHoveredEvent({ event: ev, x: e.clientX, y: e.clientY })} onMouseLeave={() => setHoveredEvent(null)} onClick={(e) => { e.stopPropagation(); setEventFormData(ev); setShowEventModal(true); }} className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md truncate border flex items-center gap-1 ${cat.color}`}><div className="flex -space-x-1 shrink-0">{ev.participants?.slice(0,3).map(p => {const mem = members.find(m=>m.id===p); return mem ? <span key={p} className="w-3 h-3 rounded-full overflow-hidden inline-block text-[6px] drop-shadow-sm z-10 relative">{renderAvatar(mem.avatar)}</span> : null;})}</div><span className="truncate">{ev.title}</span></div>); 
+           })}</div>
         </div>
       );
     }
@@ -1122,7 +1034,13 @@ export default function App() {
           <h2 className="text-2xl font-black text-slate-800">系統設定</h2>
           <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-50 text-center md:text-left md:flex items-center justify-between">
               <div className="flex flex-col md:flex-row items-center gap-4 mb-6 md:mb-0">
-                  <div className="text-5xl w-24 h-24 bg-slate-50 rounded-[2rem] flex items-center justify-center shadow-inner overflow-hidden">{renderAvatar(currentUserRole.avatar)}</div>
+                  <div className="relative group cursor-pointer">
+                      <div className="text-5xl w-24 h-24 bg-slate-50 rounded-[2rem] flex items-center justify-center shadow-inner overflow-hidden">{renderAvatar(currentUserRole.avatar)}</div>
+                      <label className="absolute inset-0 bg-black/50 rounded-[2rem] flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition cursor-pointer">
+                          <Upload size={24}/>
+                          <input type="file" className="hidden" accept="image/*" onChange={handleUpdateAvatar} />
+                      </label>
+                  </div>
                   <div><p className="font-black text-2xl text-slate-800">{currentUserRole.name}</p><p className="text-indigo-500 font-bold text-sm uppercase tracking-widest">{currentUserRole.role}</p></div>
               </div>
           </div>
@@ -1193,7 +1111,7 @@ export default function App() {
         <div className="grid grid-cols-2 gap-4 w-full max-w-sm">
           {members.map(m => (
             <button key={m.id} onClick={() => setLoginTarget(m)} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 flex flex-col items-center gap-3 active:scale-95 transition-all hover:border-indigo-200">
-              <span className="text-5xl drop-shadow-sm w-14 h-14 rounded-full overflow-hidden flex items-center justify-center">{renderAvatar(m.avatar)}</span>
+              <span className="text-5xl drop-shadow-sm w-14 h-14 flex items-center justify-center rounded-full overflow-hidden">{renderAvatar(m.avatar)}</span>
               <span className="font-black text-slate-700">{m.name.split(' ')[0]}</span>
             </button>
           ))}
